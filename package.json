@@ -1,0 +1,50 @@
+// package.json
+{
+  "name": "blueberry",
+  "version": "0.1.0",
+  "description": "Cell-based terminal rendering primitives for Bun. A TypeScript port of Ultraviolet.",
+  "module": "src/index.ts",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    },
+    "./screen": {
+      "import": "./src/screen/index.ts",
+      "types": "./src/screen/index.ts"
+    },
+    "./layout": {
+      "import": "./src/layout/index.ts",
+      "types": "./src/layout/index.ts"
+    }
+  },
+  "files": [
+    "src/**/*",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "dev": "bun --watch src",
+    "typecheck": "bun run --bun tsc --noEmit"
+  },
+  "keywords": [
+    "tui",
+    "terminal",
+    "rendering",
+    "cell",
+    "buffer",
+    "bun"
+  ],
+  "author": "yum-tty",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yum-tty/blueberry"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}
