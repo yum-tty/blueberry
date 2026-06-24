@@ -197,4 +197,161 @@ export class ScreenBuffer {
       }
     }
   }
+
+  insertLine(y: number, n: number, cell?: Cell): void {
+    if (n <= 0 || y < 0 || y >= this.height) return
+    const fillCell = cell ?? emptyCell()
+
+    const limit = Math.min(y + n, this.height)
+    for (let i = this.height - 1; i >= limit; i--) {
+      for (let x = 0; x < this.width; x++) {
+        this.cells[i]![x] = this.cells[i - n]![x]!
+      }
+    }
+
+    for (let i = y; i < limit; i++) {
+      for (let x = 0; x < this.width; x++) {
+        this.setCell(x, i, { ...fillCell })
+      }
+    }
+  }
+
+  deleteLine(y: number, n: number, cell?: Cell): void {
+    if (n <= 0 || y < 0 || y >= this.height) return
+    const fillCell = cell ?? emptyCell()
+
+    const limit = Math.min(y + n, this.height)
+    for (let dst = y; dst < this.height - n; dst++) {
+      const src = dst + n
+      for (let x = 0; x < this.width; x++) {
+        this.cells[dst]![x] = this.cells[src]![x]!
+      }
+    }
+
+    for (let i = this.height - n; i < this.height; i++) {
+      for (let x = 0; x < this.width; x++) {
+        this.setCell(x, i, { ...fillCell })
+      }
+    }
+  }
+
+  insertCell(x: number, y: number, n: number, cell?: Cell): void {
+    if (n <= 0 || y < 0 || y >= this.height || x < 0 || x >= this.width) return
+    const fillCell = cell ?? emptyCell()
+
+    for (let i = this.width - 1; i >= x + n && i - n >= 0; i--) {
+      this.cells[y]![i] = this.cells[y]![i - n]!
+    }
+
+    for (let i = x; i < x + n && i < this.width; i++) {
+      this.setCell(i, y, { ...fillCell })
+    }
+  }
+
+  deleteCell(x: number, y: number, n: number, cell?: Cell): void {
+    if (n <= 0 || y < 0 || y >= this.height || x < 0 || x >= this.width) return
+    const fillCell = cell ?? emptyCell()
+
+    const remaining = this.width - x
+    if (n > remaining) n = remaining
+
+    for (let i = x; i < this.width - n; i++) {
+      const src = this.cells[y]![i + n]!
+      this.setCell(i, y, src ? { ...src } : emptyCell())
+    }
+
+    for (let i = this.width - n; i < this.width; i++) {
+      this.setCell(i, y, { ...fillCell })
+    }
+  }
+
+  fillArea(x: number, y: number, width: number, height: number, cell?: Cell): void {
+    const fillCell = cell ?? emptyCell()
+    for (let row = y; row < y + height && row < this.height; row++) {
+      for (let col = x; col < x + width && col < this.width; col++) {
+        if (col >= 0 && row >= 0) {
+          this.setCell(col, row, { ...fillCell })
+        }
+      }
+    }
+  }
+
+  clearArea(x: number, y: number, width: number, height: number): void {
+    this.fillArea(x, y, width, height, emptyCell())
+  }
+
+  cloneArea(x: number, y: number, width: number, height: number): ScreenBuffer {
+    const clone = new ScreenBuffer(width, height)
+    for (let row = 0; row < height; row++) {
+      for (let col = 0; col < width; col++) {
+        const src = this.getCell(x + col, y + row)
+        if (src && !isZeroCell(src)) {
+          clone.setCell(col, row, { ...src })
+        }
+      }
+    }
+    return clone
+  }
+
+  clone(): ScreenBuffer {
+    return this.cloneArea(0, 0, this.width, this.height)
+  }
+
+  draw(drawable: { draw: (screen: ScreenBuffer, area: { x: number; y: number; width: number; height: number }) => void }, area?: { x: number; y: number; width: number; height: number }): void {
+    const a = area ?? { x: 0, y: 0, width: this.width, height: this.height }
+    drawable.draw(this, a)
+  }
+
+  render(): string {
+    const parts: string[] = []
+    for (let y = 0; y < this.height; y++) {
+      const lineParts: string[] = []
+      let currentStyle: Style | null = null
+
+      for (let x = 0; x < this.width; x++) {
+        const cell = this.cells[y]![x]!
+        if (isZeroCell(cell)) {
+          if (currentStyle !== null) {
+            lineParts.push("\x1b[0m")
+            currentStyle = null
+          }
+          lineParts.push(" ")
+          continue
+        }
+
+        if (cell.style !== currentStyle) {
+          if (cell.style === null || isZeroStyle(cell.style)) {
+            lineParts.push("\x1b[0m")
+            currentStyle = null
+          } else {
+            lineParts.push(styleToString(cell.style))
+            currentStyle = cell.style
+          }
+        }
+
+        lineParts.push(cell.char)
+      }
+
+      if (currentStyle !== null) {
+        lineParts.push("\x1b[0m")
+      }
+
+      parts.push(lineParts.join(""))
+    }
+
+    return parts.join("\n")
+  }
+
+  getLine(y: number): Cell[] {
+    if (y < 0 || y >= this.height) return []
+    return [...this.cells[y]!]
+  }
+}
+
+function isZeroCell(cell: Cell): boolean {
+  return cell.char === " " && cell.style === null
+}
+
+function isZeroStyle(style: Style | null): boolean {
+  return !style || Object.keys(style).length === 0
 }

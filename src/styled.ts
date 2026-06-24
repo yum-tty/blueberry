@@ -30,17 +30,27 @@ export interface StyledSpan {
 export class StyledString {
   content: string
   spans: StyledSpan[]
+  wrap: boolean
+  tail: string
 
   constructor(content: string, spans: StyledSpan[] = []) {
     this.content = content
     this.spans = spans
+    this.wrap = false
+    this.tail = ""
   }
 
   /**
    * Get the width of the string.
    */
   width(): number {
-    return stripAnsi(this.content).length
+    let maxWidth = 0
+    const lines = this.content.split("\n")
+    for (const line of lines) {
+      const w = stripAnsi(line).length
+      if (w > maxWidth) maxWidth = w
+    }
+    return maxWidth
   }
 
   /**
@@ -48,6 +58,64 @@ export class StyledString {
    */
   height(): number {
     return this.content.split("\n").length
+  }
+
+  lines(): string[] {
+    const result: string[] = []
+    let current = ""
+    let inAnsi = false
+
+    for (let i = 0; i < this.content.length; i++) {
+      const ch = this.content[i]!
+      if (ch === "\x1b") {
+        inAnsi = true
+        current += ch
+      } else if (inAnsi) {
+        current += ch
+        if (ch === "m") inAnsi = false
+      } else if (ch === "\n") {
+        result.push(current)
+        current = ""
+      } else {
+        current += ch
+      }
+    }
+    result.push(current)
+    return result
+  }
+
+  render(): string {
+    return this.content
+  }
+
+  unicodeWidth(): number {
+    let maxWidth = 0
+    const lines = this.lines()
+    for (const line of lines) {
+      const stripped = stripAnsi(line)
+      let w = 0
+      for (const ch of stripped) {
+        const code = ch.codePointAt(0)!
+        if (
+          (code >= 0x4E00 && code <= 0x9FFF) ||
+          (code >= 0x3000 && code <= 0x303F) ||
+          (code >= 0x3040 && code <= 0x309F) ||
+          (code >= 0x30A0 && code <= 0x30FF) ||
+          (code >= 0xFF00 && code <= 0xFFEF) ||
+          (code >= 0x2E80 && code <= 0x2EFF) ||
+          (code >= 0x3100 && code <= 0x312F) ||
+          (code >= 0x3130 && code <= 0x318F) ||
+          (code >= 0xAC00 && code <= 0xD7AF) ||
+          (code >= 0xF900 && code <= 0xFAFF)
+        ) {
+          w += 2
+        } else {
+          w += 1
+        }
+      }
+      if (w > maxWidth) maxWidth = w
+    }
+    return maxWidth
   }
 
   /**
