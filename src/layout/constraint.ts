@@ -61,9 +61,9 @@ export function resolveConstraint(
     case "len":
       return constraint.value
     case "min":
-      return Math.min(constraint.value, available)
-    case "max":
       return Math.max(constraint.value, available)
+    case "max":
+      return Math.min(constraint.value, available)
     case "fill":
       return Math.floor(available * constraint.value)
     case "ratio":

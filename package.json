@@ -1,4 +1,3 @@
-// package.json
 {
   "name": "blueberry",
   "version": "0.1.0",
@@ -45,6 +44,7 @@
     "url": "https://github.com/yum-tty/blueberry"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/node": "^26.0.0"
   }
 }

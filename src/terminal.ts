@@ -1,8 +1,8 @@
 // terminal.ts | terminal class (ultraviolet port)
 
-import { type TerminalEvent, type WindowSizeEvent } from "./events"
+import { type TerminalEvent, type WindowSizeEvent, type PasteEvent, type PasteStartEvent, type PasteEndEvent } from "./events"
 import { type Key } from "./keys"
-import { KeyUp, KeyDown, KeyLeft, KeyRight, KeyHome, KeyEnd, KeyPgUp, KeyPgDown, KeyDelete, KeyBackspace, KeyTab, KeyEnter, KeyEscape, KeySpace, KeyInsert } from "./keys"
+import { KeyUp, KeyDown, KeyLeft, KeyRight, KeyHome, KeyEnd, KeyPgUp, KeyPgDown, KeyDelete, KeyBackspace, KeyTab, KeyEnter, KeyEscape, KeySpace, KeyInsert, KeyExtended, KeyF1, KeyF2, KeyF3, KeyF4 } from "./keys"
 import { ScreenBuffer } from "./buffer"
 
 export interface TerminalOptions {
@@ -21,6 +21,8 @@ export class Terminal {
   private resizeListener: (() => void) | null = null
   private screenBuffer: ScreenBuffer | null = null
   private previousRawMode: boolean | undefined
+  private pasteMode = false
+  private pasteBuffer = ""
 
   constructor(private options?: TerminalOptions) {}
 
@@ -134,21 +136,30 @@ export class Terminal {
     }
   }
 
-  *events(): IterableIterator<TerminalEvent> {
-    let i = 0
-    while (this.running || i < this.eventQueue.length) {
-      if (i < this.eventQueue.length) {
-        yield this.eventQueue[i]!
-        i++
+  async *events(): AsyncGenerator<TerminalEvent> {
+    while (this.running) {
+      if (this.eventQueue.length > 0) {
+        yield this.eventQueue.shift()!
       } else {
-        // Spin-wait for new events
-        const start = Date.now()
-        const timeout = this.options?.eventTimeout ?? DEFAULT_EVENT_TIMEOUT
-        while (i >= this.eventQueue.length && Date.now() - start < timeout) {
-          // busy wait
-        }
-        if (i >= this.eventQueue.length && !this.running) break
+        await new Promise<void>(resolve => {
+          const timeout = setTimeout(resolve, 50)
+          const check = () => {
+            if (this.eventQueue.length > 0) {
+              clearTimeout(timeout)
+              resolve()
+            } else if (this.running) {
+              setTimeout(check, 10)
+            } else {
+              clearTimeout(timeout)
+              resolve()
+            }
+          }
+          check()
+        })
       }
+    }
+    while (this.eventQueue.length > 0) {
+      yield this.eventQueue.shift()!
     }
   }
 
@@ -182,8 +193,32 @@ export class Terminal {
     while (i < str.length) {
       const ch = str.charCodeAt(i)
 
+      if (this.pasteMode) {
+        const escIdx = str.indexOf("\x1b", i)
+        if (escIdx === -1) {
+          this.pasteBuffer += str.slice(i)
+          i = str.length
+          continue
+        }
+        if (escIdx > i) {
+          this.pasteBuffer += str.slice(i, escIdx)
+          i = escIdx
+        }
+        const seq = str.slice(i, i + 6)
+        if (seq === "\x1b[201~") {
+          i += 6
+          this.pasteMode = false
+          events.push({ type: "paste", content: this.pasteBuffer })
+          events.push({ type: "pasteEnd" })
+          this.pasteBuffer = ""
+        } else {
+          this.pasteBuffer += str[i]!
+          i++
+        }
+        continue
+      }
+
       if (ch === 0x1B) {
-        // ESC sequence
         i++
         if (i >= str.length) {
           events.push({ type: "keyPress", key: { code: KeyEscape, text: "", mod: 0 } })
@@ -192,52 +227,72 @@ export class Terminal {
 
         const next = str.charCodeAt(i)
         if (next === 0x5B) {
-          // CSI sequence: ESC [
           i++
           let params = ""
           while (i < str.length) {
             const c = str.charCodeAt(i)
-            if (c >= 0x30 && c <= 0x3F) { // parameter bytes
+            if (c >= 0x30 && c <= 0x3F) {
               params += str[i]
               i++
             } else {
               break
             }
           }
+
           if (i < str.length) {
             const final = str.charCodeAt(i)
             i++
 
-            if (final === 0x41) { // A - Up
+            if (final === 0x75) {
+              const parts = params.split(";")
+              const codepoint = parseInt(parts[0]!) || 0
+              const mod = parts.length > 1 ? (parseInt(parts[1]!) || 1) - 1 : 0
+              let keyCode = codepoint
+              if (codepoint >= 57344 && codepoint <= 63743) {
+                keyCode = KeyExtended + (codepoint - 57344)
+              }
+              events.push({
+                type: "keyPress",
+                key: { code: keyCode, text: codepoint < 128 ? String.fromCodePoint(codepoint) : "", mod },
+              })
+            } else if (final === 0x41) {
               events.push({ type: "keyPress", key: { code: KeyUp, text: "", mod: 0 } })
-            } else if (final === 0x42) { // B - Down
+            } else if (final === 0x42) {
               events.push({ type: "keyPress", key: { code: KeyDown, text: "", mod: 0 } })
-            } else if (final === 0x43) { // C - Right
+            } else if (final === 0x43) {
               events.push({ type: "keyPress", key: { code: KeyRight, text: "", mod: 0 } })
-            } else if (final === 0x44) { // D - Left
+            } else if (final === 0x44) {
               events.push({ type: "keyPress", key: { code: KeyLeft, text: "", mod: 0 } })
-            } else if (final === 0x48) { // H - Home
+            } else if (final === 0x48) {
               events.push({ type: "keyPress", key: { code: KeyHome, text: "", mod: 0 } })
-            } else if (final === 0x46) { // F - End
+            } else if (final === 0x46) {
               events.push({ type: "keyPress", key: { code: KeyEnd, text: "", mod: 0 } })
-            } else if (final === 0x5A) { // Z - Shift+Tab
+            } else if (final === 0x5A) {
               events.push({ type: "keyPress", key: { code: KeyTab, text: "", mod: 1 } })
             } else if (final === 0x7E) {
-              // ~ sequences
               const n = parseInt(params) || 0
-              if (n === 1 || n === 7) events.push({ type: "keyPress", key: { code: KeyHome, text: "", mod: 0 } })
-              else if (n === 4 || n === 8) events.push({ type: "keyPress", key: { code: KeyEnd, text: "", mod: 0 } })
-              else if (n === 2) events.push({ type: "keyPress", key: { code: KeyInsert, text: "", mod: 0 } })
-              else if (n === 3) events.push({ type: "keyPress", key: { code: KeyDelete, text: "", mod: 0 } })
-              else if (n === 5) events.push({ type: "keyPress", key: { code: KeyPgUp, text: "", mod: 0 } })
-              else if (n === 6) events.push({ type: "keyPress", key: { code: KeyPgDown, text: "", mod: 0 } })
-              else if (n >= 11 && n <= 24) {
-                // F1-F12
-                const code = 0x100000 + 44 + (n - 11)
+              if (n === 200) {
+                this.pasteMode = true
+                events.push({ type: "pasteStart" })
+              } else if (n === 201) {
+                events.push({ type: "pasteEnd" })
+              } else if (n === 1 || n === 7) {
+                events.push({ type: "keyPress", key: { code: KeyHome, text: "", mod: 0 } })
+              } else if (n === 4 || n === 8) {
+                events.push({ type: "keyPress", key: { code: KeyEnd, text: "", mod: 0 } })
+              } else if (n === 2) {
+                events.push({ type: "keyPress", key: { code: KeyInsert, text: "", mod: 0 } })
+              } else if (n === 3) {
+                events.push({ type: "keyPress", key: { code: KeyDelete, text: "", mod: 0 } })
+              } else if (n === 5) {
+                events.push({ type: "keyPress", key: { code: KeyPgUp, text: "", mod: 0 } })
+              } else if (n === 6) {
+                events.push({ type: "keyPress", key: { code: KeyPgDown, text: "", mod: 0 } })
+              } else if (n >= 11 && n <= 24) {
+                const code = KeyF1 + (n - 11)
                 events.push({ type: "keyPress", key: { code, text: "", mod: 0 } })
               }
             } else if (final === 0x4D || final === 0x6D) {
-              // Mouse: ESC [ < ... M or m
               if (params.startsWith("<")) {
                 const parts = params.slice(1).split(";")
                 if (parts.length >= 3) {
@@ -246,10 +301,36 @@ export class Terminal {
                   const y = (parseInt(parts[2]!) || 1) - 1
                   const mod = (btnCode >> 2) & 0x1F
                   const btn = btnCode & 0x03
-                  const isRelease = final === 0x6D // 'm' = release in SGR
+                  const isRelease = final === 0x6D
 
                   if (btnCode & 0x40) {
-                    // Wheel events
+                    events.push({
+                      type: isRelease ? "mouseRelease" : "mouseWheel",
+                      mouse: { x, y, button: btn + 4, mod },
+                    })
+                  } else if (isRelease) {
+                    events.push({
+                      type: "mouseRelease",
+                      mouse: { x, y, button: btn + 1, mod },
+                    })
+                  } else {
+                    events.push({
+                      type: "mouseClick",
+                      mouse: { x, y, button: btn + 1, mod },
+                    })
+                  }
+                }
+              } else {
+                const parts = params.split(";")
+                if (parts.length >= 3) {
+                  const btnCode = parseInt(parts[0]!) || 0
+                  const x = (parseInt(parts[1]!) || 1) - 1
+                  const y = (parseInt(parts[2]!) || 1) - 1
+                  const mod = (btnCode >> 2) & 0x1F
+                  const btn = btnCode & 0x03
+                  const isRelease = final === 0x6D
+
+                  if (btnCode & 0x40) {
                     events.push({
                       type: isRelease ? "mouseRelease" : "mouseWheel",
                       mouse: { x, y, button: btn + 4, mod },
@@ -268,7 +349,6 @@ export class Terminal {
                 }
               }
             } else if (final === 0x52) {
-              // Cursor position report
               const parts = params.split(";")
               if (parts.length === 2) {
                 events.push({
@@ -277,28 +357,110 @@ export class Terminal {
                   x: (parseInt(parts[1]!) || 1) - 1,
                 })
               }
+            } else if (final === 0x4D) {
+              if (i + 3 <= str.length) {
+                const b = str.charCodeAt(i) - 32
+                const cx = str.charCodeAt(i + 1) - 32
+                const cy = str.charCodeAt(i + 2) - 32
+                i += 3
+
+                const mod = (b >> 2) & 0x1F
+                const btnBits = b & 0x03
+                const isRelease = btnBits === 3
+                const isMotion = (b & 0x20) !== 0
+                const isWheel = (b & 0x40) !== 0
+
+                if (isWheel) {
+                  events.push({
+                    type: "mouseWheel",
+                    mouse: { x: cx - 1, y: cy - 1, button: btnBits + 4, mod },
+                  })
+                } else if (isMotion) {
+                  events.push({
+                    type: "mouseMotion",
+                    mouse: { x: cx - 1, y: cy - 1, button: btnBits + 1, mod },
+                  })
+                } else if (isRelease) {
+                  events.push({
+                    type: "mouseRelease",
+                    mouse: { x: cx - 1, y: cy - 1, button: 0, mod },
+                  })
+                } else {
+                  events.push({
+                    type: "mouseClick",
+                    mouse: { x: cx - 1, y: cy - 1, button: btnBits + 1, mod },
+                  })
+                }
+              }
             }
           }
         } else if (next === 0x4F) {
-          // SS3 sequence: ESC O
           i++
           if (i < str.length) {
             const final = str.charCodeAt(i)
             i++
-            if (final === 0x50) events.push({ type: "keyPress", key: { code: 0x100000 + 44, text: "", mod: 0 } }) // F1
-            else if (final === 0x51) events.push({ type: "keyPress", key: { code: 0x100000 + 45, text: "", mod: 0 } }) // F2
-            else if (final === 0x52) events.push({ type: "keyPress", key: { code: 0x100000 + 46, text: "", mod: 0 } }) // F3
-            else if (final === 0x53) events.push({ type: "keyPress", key: { code: 0x100000 + 47, text: "", mod: 0 } }) // F4
+            if (final === 0x50) events.push({ type: "keyPress", key: { code: KeyF1, text: "", mod: 0 } })
+            else if (final === 0x51) events.push({ type: "keyPress", key: { code: KeyF2, text: "", mod: 0 } })
+            else if (final === 0x52) events.push({ type: "keyPress", key: { code: KeyF3, text: "", mod: 0 } })
+            else if (final === 0x53) events.push({ type: "keyPress", key: { code: KeyF4, text: "", mod: 0 } })
+            else if (final === 0x41) events.push({ type: "keyPress", key: { code: KeyUp, text: "", mod: 0 } })
+            else if (final === 0x42) events.push({ type: "keyPress", key: { code: KeyDown, text: "", mod: 0 } })
+            else if (final === 0x43) events.push({ type: "keyPress", key: { code: KeyRight, text: "", mod: 0 } })
+            else if (final === 0x44) events.push({ type: "keyPress", key: { code: KeyLeft, text: "", mod: 0 } })
+            else if (final === 0x48) events.push({ type: "keyPress", key: { code: KeyHome, text: "", mod: 0 } })
+            else if (final === 0x46) events.push({ type: "keyPress", key: { code: KeyEnd, text: "", mod: 0 } })
+            else if (final === 0x5A) events.push({ type: "keyPress", key: { code: KeyTab, text: "", mod: 1 } })
+          }
+        } else if (next === 0x5D) {
+          i++
+          let cmd = -1
+          let cmdStr = ""
+          while (i < str.length && str.charCodeAt(i) >= 0x30 && str.charCodeAt(i) <= 0x39) {
+            cmdStr += str[i]
+            i++
+          }
+
+          if (cmdStr.length > 0) {
+            cmd = parseInt(cmdStr, 10)
+          }
+
+          if (i < str.length && str.charCodeAt(i) === 0x3B) {
+            i++
+          }
+
+          let data = ""
+          while (i < str.length) {
+            const c = str.charCodeAt(i)
+            if (c === 0x07 || c === 0x1B) {
+              if (c === 0x1B) {
+                i++
+                if (i < str.length && str.charCodeAt(i) === 0x5C) {
+                  i++
+                }
+              } else {
+                i++
+              }
+              break
+            }
+            data += str[i]
+            i++
+          }
+
+          if (cmd === 0) {
+            events.push({ type: "unknown", raw: `OSC 0: ${data}` })
+          } else if (cmd === 8) {
+            const parts = data.split(";")
+            if (parts.length >= 3) {
+              events.push({ type: "unknown", raw: `OSC 8: ${parts[2]}` })
+            }
           }
         } else if (next >= 0x61 && next <= 0x7A) {
-          // Alt+letter
           events.push({
             type: "keyPress",
-            key: { code: next, text: "", mod: 2 }, // ModAlt
+            key: { code: next, text: "", mod: 2 },
           })
           i++
         } else if (next === 0x1B) {
-          // Double ESC
           events.push({ type: "keyPress", key: { code: KeyEscape, text: "", mod: 0 } })
         } else {
           events.push({ type: "keyPress", key: { code: next, text: "", mod: 2 } })
@@ -314,11 +476,9 @@ export class Terminal {
         events.push({ type: "keyPress", key: { code: KeyBackspace, text: "", mod: 0 } })
         i++
       } else if (ch >= 0x01 && ch <= 0x1A) {
-        // Ctrl+letter
-        events.push({ type: "keyPress", key: { code: ch + 0x60, text: "", mod: 4 } }) // ModCtrl
+        events.push({ type: "keyPress", key: { code: ch + 0x60, text: "", mod: 4 } })
         i++
       } else {
-        // Regular character
         events.push({ type: "keyPress", key: { code: ch, text: str[i], mod: 0 } })
         i++
       }

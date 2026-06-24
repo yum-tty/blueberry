@@ -9,6 +9,8 @@ export interface Cell {
   char: string
   style: Style | null
   width: number
+  link?: string
+  linkParams?: string
 }
 
 /**
@@ -30,17 +32,31 @@ export function emptyCell(): Cell {
 }
 
 /**
- * Check if a cell is zero/empty.
+ * Check if a cell is zero/empty. Matches Go's `*c == Cell{}` which checks
+ * all fields are their zero values: Content=="", Width==0, Style==zero, Link==zero.
  */
 export function isZero(cell: Cell): boolean {
-  return cell.char === " " && cell.style === null
+  return (
+    cell.char === "" &&
+    cell.width === 0 &&
+    cell.style === null &&
+    !cell.link &&
+    !cell.linkParams
+  )
 }
 
 /**
- * Compare two cells.
+ * Compare two cells. Matches Go's Cell.Equal which checks Content, Width,
+ * Style, and Link.
  */
 export function cellEquals(a: Cell, b: Cell): boolean {
-  return a.char === b.char && a.style === b.style && a.width === b.width
+  return (
+    a.char === b.char &&
+    a.width === b.width &&
+    a.style === b.style &&
+    (a.link ?? "") === (b.link ?? "") &&
+    (a.linkParams ?? "") === (b.linkParams ?? "")
+  )
 }
 
 /**

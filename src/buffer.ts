@@ -1,7 +1,7 @@
 // buffer.ts | screen buffer (ultraviolet port)
 
-import { type Cell, emptyCell, cellEquals } from "./cell"
-import { type Style, styleToString, stripAnsi } from "./styled"
+import { type Cell, emptyCell, isZero, cellEquals } from "./cell"
+import { type Style, styleToString, styleDiff, isStyleEmpty, stylesEqual, stripAnsi } from "./styled"
 
 /**
  * ScreenBuffer is a cell-based screen buffer.
@@ -10,12 +10,12 @@ export class ScreenBuffer {
   private cells: Cell[][]
   private width: number
   private height: number
-  private touched: Set<string>
+  private touched: Map<number, { first: number; last: number }>
 
   constructor(width: number, height: number) {
     this.width = width
     this.height = height
-    this.touched = new Set()
+    this.touched = new Map()
     this.cells = []
     for (let y = 0; y < height; y++) {
       const row: Cell[] = []
@@ -51,15 +51,58 @@ export class ScreenBuffer {
   }
 
   /**
-   * Set a cell at the given position.
+   * Set a cell at the given position. Handles wide character placeholder logic
+   * matching Go's Line.Set: clears parent wide cells when overwriting
+   * placeholders, and fills placeholder slots when writing wide cells.
    */
   setCell(x: number, y: number, cell: Cell): void {
-    if (y >= 0 && y < this.height && x >= 0 && x < this.width) {
-      const prev = this.cells[y]![x]!
-      if (!cellEquals(prev, cell)) {
-        this.cells[y]![x] = cell
-        this.touched.add(`${x},${y}`)
+    if (y < 0 || y >= this.height || x < 0 || x >= this.width) return
+
+    const line = this.cells[y]!
+    const prev = line[x]!
+
+    if (prev.width > 1) {
+      // Writing to the first cell of a wide character — fill all its
+      // occupied positions with empty cells.
+      for (let j = 0; j < prev.width && x + j < this.width; j++) {
+        line[x + j] = emptyCell()
       }
+    } else if (prev.width === 0 && !isZero(prev)) {
+      // Writing to a wide-cell placeholder (width 0, not a zero cell) —
+      // find the parent wide cell and clear it.
+      for (let j = 1; x - j >= 0; j++) {
+        const wide = line[x - j]!
+        if (wide.width > 1 && j < wide.width) {
+          for (let k = 0; k < wide.width; k++) {
+            line[x - j + k] = emptyCell()
+          }
+          break
+        }
+      }
+    }
+
+    const lineWidth = this.width
+    line[x] = cell
+    const cw = cell.width
+
+    if (x + cw > lineWidth) {
+      // Cell overflows the line — fill remaining with empty cells.
+      for (let i = 1; i < cw && x + i < lineWidth; i++) {
+        line[x + i] = emptyCell()
+      }
+    } else if (cw > 1) {
+      // Mark trailing positions as zero-width placeholders.
+      for (let j = 1; j < cw && x + j < lineWidth; j++) {
+        line[x + j] = { char: "", style: null, width: 0 }
+      }
+    }
+
+    const existing = this.touched.get(y)
+    if (existing) {
+      existing.first = Math.min(existing.first, x)
+      existing.last = Math.max(existing.last, x + Math.max(cw, 1))
+    } else {
+      this.touched.set(y, { first: x, last: x + Math.max(cw, 1) })
     }
   }
 
@@ -83,7 +126,7 @@ export class ScreenBuffer {
     this.width = width
     this.height = height
     this.cells = []
-    this.touched.clear()
+    this.touched = new Map()
 
     for (let y = 0; y < height; y++) {
       const row: Cell[] = []
@@ -134,7 +177,7 @@ export class ScreenBuffer {
   /**
    * Get the touched cells.
    */
-  getTouched(): Set<string> {
+  getTouched(): Map<number, { first: number; last: number }> {
     return this.touched
   }
 
@@ -285,7 +328,7 @@ export class ScreenBuffer {
     for (let row = 0; row < height; row++) {
       for (let col = 0; col < width; col++) {
         const src = this.getCell(x + col, y + row)
-        if (src && !isZeroCell(src)) {
+        if (src && !isZero(src)) {
           clone.setCell(col, row, { ...src })
         }
       }
@@ -306,33 +349,36 @@ export class ScreenBuffer {
     const parts: string[] = []
     for (let y = 0; y < this.height; y++) {
       const lineParts: string[] = []
-      let currentStyle: Style | null = null
+      let pen: Style | null = null
 
       for (let x = 0; x < this.width; x++) {
         const cell = this.cells[y]![x]!
-        if (isZeroCell(cell)) {
-          if (currentStyle !== null) {
+        if (isZero(cell)) {
+          continue
+        }
+        if (cell.char === " " && isStyleEmpty(cell.style)) {
+          if (!isStyleEmpty(pen)) {
             lineParts.push("\x1b[0m")
-            currentStyle = null
+            pen = null
           }
           lineParts.push(" ")
           continue
         }
 
-        if (cell.style !== currentStyle) {
-          if (cell.style === null || isZeroStyle(cell.style)) {
-            lineParts.push("\x1b[0m")
-            currentStyle = null
-          } else {
-            lineParts.push(styleToString(cell.style))
-            currentStyle = cell.style
-          }
+        const cellStyle = cell.style
+        if (isStyleEmpty(cellStyle) && !isStyleEmpty(pen)) {
+          lineParts.push("\x1b[0m")
+          pen = null
+        }
+        if (!isStyleEmpty(cellStyle) && !stylesEqual(pen, cellStyle)) {
+          lineParts.push(styleDiff(pen, cellStyle))
+          pen = cellStyle
         }
 
         lineParts.push(cell.char)
       }
 
-      if (currentStyle !== null) {
+      if (!isStyleEmpty(pen)) {
         lineParts.push("\x1b[0m")
       }
 
@@ -346,12 +392,4 @@ export class ScreenBuffer {
     if (y < 0 || y >= this.height) return []
     return [...this.cells[y]!]
   }
-}
-
-function isZeroCell(cell: Cell): boolean {
-  return cell.char === " " && cell.style === null
-}
-
-function isZeroStyle(style: Style | null): boolean {
-  return !style || Object.keys(style).length === 0
 }

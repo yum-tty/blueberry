@@ -1,8 +1,8 @@
 // terminal_renderer.ts | terminal renderer (ultraviolet port)
 
 import { ScreenBuffer } from "./buffer"
-import { type Cell, cellEquals } from "./cell"
-import { styleToString } from "./styled"
+import { type Cell, cellEquals, isZero } from "./cell"
+import { type Style, styleToString, styleDiff, isStyleEmpty, stylesEqual } from "./styled"
 
 const ESC = "\x1b"
 const CSI = `${ESC}[`
@@ -70,14 +70,14 @@ export class TerminalRenderer {
     for (let y = 0; y < Math.min(lines.length, this.height); y++) {
       const line = lines[y]!
       let x = 0
-      let currentStyle: any = null
+      let currentStyle: Style | null = null
 
       for (let i = 0; i < line.length && x < this.width; i++) {
         const char = line[i]!
 
-        // Handle ANSI escape sequences
         if (char === "\x1b") {
-          let seq = ""
+          let seq = "\x1b"
+          i++
           while (i < line.length && line[i] !== "m") {
             seq += line[i]!
             i++
@@ -87,11 +87,9 @@ export class TerminalRenderer {
             i++
           }
 
-          // Parse style
-          const styleStr = seq
-          if (styleStr.includes("1")) currentStyle = { bold: true }
-          else if (styleStr.includes("0")) currentStyle = null
-
+          const style = parseSgrSequence(seq, currentStyle)
+          currentStyle = style
+          i--
           continue
         }
 
@@ -106,42 +104,57 @@ export class TerminalRenderer {
   }
 
   /**
-   * Compare buffers and render changes.
+   * Compare buffers and render changes. Uses incremental style diffing
+   * matching Go's StyleDiff for minimal ANSI transitions.
    */
   private diffAndRender(): void {
     let buffer = ""
     let changes = 0
 
     for (let y = 0; y < this.height; y++) {
+      let pen: Style | null = null
+
       for (let x = 0; x < this.width; x++) {
         const prev = this.prevBuffer.getCell(x, y)
         const curr = this.currBuffer.getCell(x, y)
 
         if (prev && curr && !cellEquals(prev, curr)) {
-          buffer += `${CSI}${y + 1};${x + 1}H`
+          if (!isZero(curr)) {
+            buffer += `${CSI}${y + 1};${x + 1}H`
 
-          // Apply style
-          if (curr.style) {
-            buffer += styleToString(curr.style)
+            const currStyle = curr.style
+            if (!isStyleEmpty(currStyle)) {
+              if (!stylesEqual(pen, currStyle)) {
+                buffer += styleDiff(pen, currStyle)
+                pen = currStyle
+              }
+            } else if (!isStyleEmpty(pen)) {
+              buffer += `${CSI}0m`
+              pen = null
+            }
+
+            buffer += curr.char
           }
-
-          buffer += curr.char
-
-          // Reset style if needed
-          if (curr.style) {
-            buffer += `${CSI}0m`
-          }
-
           changes++
         }
+      }
+
+      // Reset pen at end of line if needed
+      if (!isStyleEmpty(pen)) {
+        // pen will be reset on next line's first cell or at end
       }
     }
 
     if (changes > 0) {
+      if (this.syncdUpdates) {
+        this.output.write(`${CSI}?2026h`)
+      }
       this.output.write(buffer)
+      if (this.syncdUpdates) {
+        this.output.write(`${CSI}?2026l`)
+      }
     }
 
-    // Swap buffers
     const temp = this.prevBuffer
     this.prevBuffer = this.currBuffer
     this.currBuffer = temp
@@ -200,10 +213,18 @@ export class TerminalRenderer {
     this.showCursor()
 
     if (this.altScreen) {
-      this.write(`${CSI}?1049l`) // Leave alternate screen
+      this.write(`${CSI}?1049l`)
     }
 
-    this.write(`${CSI}0m`) // Reset styles
+    this.write(`${CSI}0m`)
+  }
+
+  enableSyncUpdates(): void {
+    this.syncdUpdates = true
+  }
+
+  disableSyncUpdates(): void {
+    this.syncdUpdates = false
   }
 
   /**
@@ -216,4 +237,173 @@ export class TerminalRenderer {
   private write(data: string): void {
     this.output.write(data)
   }
+}
+
+const BRIGHT_COLORS = [
+  "#555555", "#FF5555", "#55FF55", "#FFFF55",
+  "#5555FF", "#FF55FF", "#55FFFF", "#FFFFFF",
+]
+
+const BRIGHT_FG_OFFSET = 90
+const BRIGHT_BG_OFFSET = 100
+
+function parseSgrSequence(seq: string, current: Style | null): Style | null {
+  const match = seq.match(/^\x1b\[([0-9;]*)m$/)
+  if (!match) return current
+
+  const paramsStr = match[1]!
+  if (paramsStr === "") return null
+
+  const params = paramsStr.split(";").map(s => parseInt(s, 10) || 0)
+  let style: Style = current ? { ...current } : {}
+
+  for (let i = 0; i < params.length; i++) {
+    const p = params[i]!
+    switch (p) {
+      case 0:
+        style = {}
+        break
+      case 1:
+        style.bold = true
+        break
+      case 2:
+        style.dim = true
+        break
+      case 3:
+        style.italic = true
+        break
+      case 4:
+        style.underline = true
+        break
+      case 5:
+      case 6:
+        break
+      case 7:
+        style.reverse = true
+        break
+      case 8:
+        break
+      case 9:
+        style.strikethrough = true
+        break
+      case 22:
+        style.bold = false
+        style.dim = false
+        break
+      case 23:
+        style.italic = false
+        break
+      case 24:
+        style.underline = false
+        break
+      case 25:
+        break
+      case 27:
+        style.reverse = false
+        break
+      case 28:
+        break
+      case 29:
+        style.strikethrough = false
+        break
+      case 30: case 31: case 32: case 33:
+      case 34: case 35: case 36: case 37:
+        style.foreground = BRIGHT_COLORS[p - 30]!
+        style.fgCode = p
+        break
+      case 38: {
+        if (params[i + 1] === 5 && i + 2 < params.length) {
+          const idx = params[i + 2]!
+          if (idx < 8) {
+            style.foreground = BRIGHT_COLORS[idx]!
+            style.fgCode = 30 + idx
+          } else if (idx < 16) {
+            style.foreground = BRIGHT_COLORS[idx - 8]!
+            style.fgCode = 90 + (idx - 8)
+          } else {
+            style.foreground = `#${hexFrom256(idx)}`
+          }
+          i += 2
+        } else if (params[i + 1] === 2 && i + 4 < params.length) {
+          const r = params[i + 2]!
+          const g = params[i + 3]!
+          const b = params[i + 4]!
+          style.foreground = `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`
+          i += 4
+        }
+        break
+      }
+      case 39:
+        style.foreground = undefined
+        break
+      case 40: case 41: case 42: case 43:
+      case 44: case 45: case 46: case 47:
+        style.background = BRIGHT_COLORS[p - 40]!
+        style.bgCode = p
+        break
+      case 48: {
+        if (params[i + 1] === 5 && i + 2 < params.length) {
+          const idx = params[i + 2]!
+          if (idx < 8) {
+            style.background = BRIGHT_COLORS[idx]!
+            style.bgCode = 40 + idx
+          } else if (idx < 16) {
+            style.background = BRIGHT_COLORS[idx - 8]!
+            style.bgCode = 100 + (idx - 8)
+          } else {
+            style.background = `#${hexFrom256(idx)}`
+          }
+          i += 2
+        } else if (params[i + 1] === 2 && i + 4 < params.length) {
+          const r = params[i + 2]!
+          const g = params[i + 3]!
+          const b = params[i + 4]!
+          style.background = `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`
+          i += 4
+        }
+        break
+      }
+      case 49:
+        style.background = undefined
+        break
+      case 90: case 91: case 92: case 93:
+      case 94: case 95: case 96: case 97:
+        style.foreground = BRIGHT_COLORS[p - 90 + 8]!
+        style.fgCode = p
+        break
+      case 100: case 101: case 102: case 103:
+      case 104: case 105: case 106: case 107:
+        style.background = BRIGHT_COLORS[p - 100 + 8]!
+        style.bgCode = p
+        break
+    }
+  }
+
+  const isEmpty = !style.bold && !style.italic && !style.underline &&
+    !style.strikethrough && !style.dim && !style.reverse &&
+    !style.foreground && !style.background &&
+    style.fgCode == null && style.bgCode == null
+  return isEmpty ? null : style
+}
+
+function hexFrom256(idx: number): string {
+  if (idx < 16) {
+    const table = [
+      "000000", "800000", "008000", "808000",
+      "000080", "800080", "008080", "c0c0c0",
+      "808080", "ff0000", "00ff00", "ffff00",
+      "0000ff", "ff00ff", "00ffff", "ffffff",
+    ]
+    return table[idx]!
+  }
+  if (idx < 232) {
+    const i = idx - 16
+    const r = Math.floor(i / 36)
+    const g = Math.floor((i % 36) / 6)
+    const b = i % 6
+    const toHex = (v: number) => (v === 0 ? 0 : 55 + v * 40).toString(16).padStart(2, "0")
+    return `${toHex(r)}${toHex(g)}${toHex(b)}`
+  }
+  const gray = 8 + (idx - 232) * 10
+  return gray.toString(16).padStart(2, "0") + gray.toString(16).padStart(2, "0") + gray.toString(16).padStart(2, "0")
 }
