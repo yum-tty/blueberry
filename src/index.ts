@@ -1,9 +1,11 @@
 // index.ts | Blueberry - ultraviolet port for Bun
 
+// ── Core exports ──
 export {
   type Cell,
   newCell,
   emptyCell,
+  EmptyCell,
   isZero,
   cellEquals,
 } from "./cell"
@@ -227,3 +229,26 @@ export {
   Terminal,
   type TerminalOptions,
 } from "./terminal"
+
+// ── Ultraviolet-compatible re-exports ──
+export {
+  AttrBold, AttrFaint, AttrItalic, AttrBlink, AttrRapidBlink,
+  AttrReverse, AttrConceal, AttrStrikethrough, AttrReset, AttrSlowBlink,
+  UnderlineNone, UnderlineSingle, UnderlineDouble, UnderlineCurly,
+  UnderlineDotted, UnderlineDashed,
+  UnderlineStyleNone, UnderlineStyleSingle, UnderlineStyleDouble,
+  UnderlineStyleCurly, UnderlineStyleDotted, UnderlineStyleDashed,
+  Horizontal, Vertical, Left, Right,
+  NormalBorder, RoundedBorder, DoubleBorder, ThickBorder,
+  HiddenBorder, BlockBorder, InnerHalfBlockBorder, OuterHalfBlockBorder,
+  MarkdownBorder, ASCIIBorder,
+  Rect, NewLink, ReadLink, ConvertLink,
+  ConvertStyle, StyleDiff,
+  NewCell, TrimSpace, Logger, Environ,
+} from "./compat"
+
+export type {
+  Underline, UnderlineStyle as UVUnderlineStyle,
+  Direction, Side, Position as UVPosition,
+  Border, Rectangle, Size, Link, WidthMethod,
+} from "./compat"

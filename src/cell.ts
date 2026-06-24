@@ -32,6 +32,11 @@ export function emptyCell(): Cell {
 }
 
 /**
+ * EmptyCell is a cell with a single space, width of 1, and no style (Go-compatible).
+ */
+export const EmptyCell: Cell = { char: " ", style: null, width: 1 }
+
+/**
  * Check if a cell is zero/empty. Matches Go's `*c == Cell{}` which checks
  * all fields are their zero values: Content=="", Width==0, Style==zero, Link==zero.
  */
