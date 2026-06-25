@@ -154,3 +154,105 @@ export class Logger {
 export function Environ(): Record<string, string> {
   return Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== undefined) as [string, string][])
 }
+
+// ── Encode stubs ──
+export function EncodeBackgroundColor(): string { return "" }
+export function EncodeBracketedPaste(): string { return "" }
+export function EncodeCursorColor(): string { return "" }
+export function EncodeCursorStyle(): string { return "" }
+export function EncodeForegroundColor(): string { return "" }
+export function EncodeKeyboardEnhancements(): string { return "" }
+export function EncodeMouseEncoding(): string { return "" }
+export function EncodeMouseMode(): string { return "" }
+export function EncodeProgressBar(): string { return "" }
+export function EncodeWindowTitle(): string { return "" }
+
+// ── Error constants ──
+export const ErrCanceled = new Error("canceled")
+export const ErrInvalidDimensions = new Error("invalid dimensions")
+export const ErrReaderNotStarted = new Error("reader not started")
+
+// ── Mouse constants ──
+export const MouseNone = 0
+export const MouseLeft = 1
+export const MouseMiddle = 2
+export const MouseRight = 3
+export const MouseBackward = 4
+export const MouseForward = 5
+export const MouseModeNone = 0
+export const MouseModePress = 1
+export const MouseButton10 = 10
+export const MouseButton11 = 11
+export const MouseWheelDown = 12
+export const MouseWheelUp = 13
+export const MouseWheelLeft = 14
+export const MouseWheelRight = 15
+
+// ── Cursor constants ──
+export const CursorBar = "bar"
+export const CursorBlock = "block"
+export const CursorUnderline = "underline"
+export const CursorShape = "default"
+
+// ── Clipboard ──
+export const ClipboardSelection = "clipboard"
+export const PrimaryClipboard = "primary"
+export const SystemClipboard = "system"
+
+// ── Progress ──
+export const ProgressBarDefault = "default"
+export const ProgressBarError = "error"
+export const ProgressBarIndeterminate = "indeterminate"
+export const ProgressBarNone = "none"
+export const ProgressBarState = "state"
+export const ProgressBarWarning = "warning"
+
+// ── TabStops ──
+export function DefaultTabStops(): number[] {
+  const stops: number[] = []
+  for (let i = 0; i < 256; i += 8) stops.push(i)
+  return stops
+}
+export const TabStops = DefaultTabStops()
+
+// ── Terminal stubs ──
+export const DefaultConsole = null
+export const DefaultTerminal = null
+export const DefaultOptions = {}
+export const ControllingConsole = null
+export const ControllingTerminal = null
+export const LegacyKeyEncoding = false
+export const Suspend = () => {}
+export const NotifyWinch = () => {}
+export const NotifyWinchContext = () => {}
+export const OpenTTY = () => null
+export const File = null
+export const TTY = null
+export const Console = null
+
+// ── Window ──
+export const Window = { width: 80, height: 24 }
+export const NewWindow = () => ({ width: 80, height: 24 })
+export const Winsize = { width: 80, height: 24 }
+export const SizeNotifier = null
+
+// ── Misc ──
+export function Pos(x: number, y: number): { x: number; y: number } { return { x, y } }
+export function New(...args: any[]): any { return args }
+export const Options = {}
+export function NewProgressBar(): any { return null }
+export function NewSizeNotifier(): any { return null }
+export function NewTabStops(): number[] { return DefaultTabStops() }
+export function NewKeyboardEnhancements(): any { return null }
+export function NewCursor(): any { return null }
+export function NewContext(): any { return null }
+export function NewCancelReader(): any { return null }
+export function NewStyledString(str: string): any { return { text: str, wrap: false, tail: "" } }
+
+// ── Drawable ──
+export interface Drawable { draw(buf: any, area: any): void }
+export type DrawableFunc = (buf: any, area: any) => void
+
+// ── Line/LineData ──
+export type LineData = string
+export type Splitted = string[]
