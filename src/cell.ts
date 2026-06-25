@@ -1,9 +1,11 @@
 // cell.ts | cell representation (ultraviolet port)
 
 import type { Style } from "./styled"
+import { stylesEqual } from "./styled"
 
 /**
  * Cell represents a single cell in the terminal.
+ * Matches Go ultraviolet's Cell struct.
  */
 export interface Cell {
   char: string
@@ -11,6 +13,52 @@ export interface Cell {
   width: number
   link?: string
   linkParams?: string
+}
+
+/**
+ * Create a new cell from a grapheme cluster.
+ * Go: NewCell(method WidthMethod, gr string) *Cell
+ */
+export function newCell(char: string, style: Style | null = null): Cell {
+  return {
+    char,
+    style,
+    width: getCharWidth(char),
+  }
+}
+
+/**
+ * Create an empty cell.
+ */
+export function emptyCell(): Cell {
+  return { char: " ", style: null, width: 1 }
+}
+
+/**
+ * Check if a cell is zero/empty.
+ */
+export function isZero(cell: Cell): boolean {
+  return (
+    cell.char === "" &&
+    cell.width === 0 &&
+    cell.style === null &&
+    !cell.link &&
+    !cell.linkParams
+  )
+}
+
+/**
+ * Deep comparison of two cells including style fields.
+ * Go: Cell.Equal checks Content, Width, Style.Equal, Link.Equal
+ */
+export function cellEquals(a: Cell, b: Cell): boolean {
+  return (
+    a.char === b.char &&
+    a.width === b.width &&
+    stylesEqual(a.style, b.style) &&
+    (a.link ?? "") === (b.link ?? "") &&
+    (a.linkParams ?? "") === (b.linkParams ?? "")
+  )
 }
 
 /**
@@ -58,7 +106,7 @@ export function cellEquals(a: Cell, b: Cell): boolean {
   return (
     a.char === b.char &&
     a.width === b.width &&
-    a.style === b.style &&
+    stylesEqual(a.style, b.style) &&
     (a.link ?? "") === (b.link ?? "") &&
     (a.linkParams ?? "") === (b.linkParams ?? "")
   )

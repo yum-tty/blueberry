@@ -1,22 +1,30 @@
 // styled.ts | styled string (ultraviolet port)
 
 /**
+ * Underline style enum matching Go ultraviolet's ansi.Underline.
+ */
+export type Underline = "none" | "single" | "double" | "curly" | "dotted" | "dashed"
+
+/**
  * Style represents a styled text span.
+ * Matches Go ultraviolet's Style struct.
  */
 export interface Style {
   foreground?: string
   background?: string
   bold?: boolean
   italic?: boolean
-  underline?: boolean
+  underline?: Underline
+  underlineColor?: string
   strikethrough?: boolean
   dim?: boolean
   reverse?: boolean
+  blink?: boolean
+  rapidBlink?: boolean
+  conceal?: boolean
   link?: string
   linkParams?: string
-  /** 4-bit ANSI foreground code (30-37 or 90-97). When set, prefer over foreground hex. */
   fgCode?: number
-  /** 4-bit ANSI background code (40-47 or 100-107). When set, prefer over background hex. */
   bgCode?: number
 }
 
@@ -137,18 +145,30 @@ export class StyledString {
 }
 
 /**
- * Convert a Style to an ANSI string. Uses 4-bit codes when fgCode/bgCode
- * are available, matching Go's ansi.BasicColor emission.
+ * Convert a Style to an ANSI string.
  */
 export function styleToString(style: Style): string {
   const parts: string[] = []
 
   if (style.bold) parts.push("1")
-  if (style.italic) parts.push("3")
-  if (style.underline) parts.push("4")
-  if (style.strikethrough) parts.push("9")
   if (style.dim) parts.push("2")
+  if (style.italic) parts.push("3")
+  if (style.blink) parts.push("5")
+  if (style.rapidBlink) parts.push("6")
   if (style.reverse) parts.push("7")
+  if (style.conceal) parts.push("8")
+  if (style.strikethrough) parts.push("9")
+
+  // Underline with style variant
+  if (style.underline && style.underline !== "none") {
+    switch (style.underline) {
+      case "double": parts.push("4:2"); break
+      case "curly": parts.push("4:3"); break
+      case "dotted": parts.push("4:4"); break
+      case "dashed": parts.push("4:5"); break
+      default: parts.push("4")
+    }
+  }
 
   if (style.fgCode != null) {
     parts.push(String(style.fgCode))
@@ -160,6 +180,11 @@ export function styleToString(style: Style): string {
     parts.push(String(style.bgCode))
   } else if (style.background) {
     parts.push(`48;2;${hexToRgb(style.background)}`)
+  }
+
+  // Underline color (SGR 58)
+  if (style.underlineColor) {
+    parts.push(`58;2;${hexToRgb(style.underlineColor)}`)
   }
 
   if (parts.length === 0) return ""
@@ -175,8 +200,9 @@ const RESET = "\x1b[0m"
 export function isStyleEmpty(s: Style | null): boolean {
   if (!s) return true
   return (
-    !s.bold && !s.italic && !s.underline && !s.strikethrough &&
-    !s.dim && !s.reverse && !s.foreground && !s.background &&
+    !s.bold && !s.italic && (!s.underline || s.underline === "none") && !s.strikethrough &&
+    !s.dim && !s.reverse && !s.blink && !s.rapidBlink && !s.conceal &&
+    !s.foreground && !s.background && !s.underlineColor &&
     s.fgCode == null && s.bgCode == null
   )
 }
@@ -191,8 +217,6 @@ function codeEqual(a?: number, b?: number): boolean {
 
 /**
  * Compute the minimal ANSI SGR sequence to transition from `from` to `to`.
- * Returns empty string when styles are equal. Returns a reset when `to` is
- * empty. Matches Go's StyleDiff logic.
  */
 export function styleDiff(from: Style | null, to: Style | null): string {
   if (!from && !to) return ""
@@ -202,6 +226,7 @@ export function styleDiff(from: Style | null, to: Style | null): string {
 
   const parts: string[] = []
 
+  // Bold/dim share SGR 22 for reset
   const fromBold = !!from.bold
   const toBold = !!to.bold
   const fromDim = !!from.dim
@@ -217,57 +242,66 @@ export function styleDiff(from: Style | null, to: Style | null): string {
     }
   }
 
-  const fromItalic = !!from.italic
-  const toItalic = !!to.italic
-  if (fromItalic !== toItalic && !toItalic) {
-    parts.push("23")
+  // Italic
+  if (!!from.italic !== !!to.italic && !to.italic) parts.push("23")
+
+  // Underline (with variants)
+  const fromUL = from.underline ?? "none"
+  const toUL = to.underline ?? "none"
+  if (fromUL !== toUL) {
+    if (fromUL !== "none" && toUL === "none") {
+      parts.push("24") // reset underline
+    }
   }
 
-  const fromUnderline = !!from.underline
-  const toUnderline = !!to.underline
-  if (fromUnderline !== toUnderline && !toUnderline) {
-    parts.push("24")
-  }
+  // Reverse
+  if (!!from.reverse !== !!to.reverse && !to.reverse) parts.push("27")
 
-  const fromReverse = !!from.reverse
-  const toReverse = !!to.reverse
-  if (fromReverse !== toReverse && !toReverse) {
-    parts.push("27")
-  }
+  // Strikethrough
+  if (!!from.strikethrough !== !!to.strikethrough && !to.strikethrough) parts.push("29")
 
-  const fromStrikethrough = !!from.strikethrough
-  const toStrikethrough = !!to.strikethrough
-  if (fromStrikethrough !== toStrikethrough && !toStrikethrough) {
-    parts.push("29")
-  }
+  // Blink
+  if (!!from.blink !== !!to.blink && !to.blink) parts.push("25")
+
+  // Conceal
+  if (!!from.conceal !== !!to.conceal && !to.conceal) parts.push("28")
 
   // Set new attributes
   if (boldChanged && toBold) parts.push("1")
   if (dimChanged && toDim) parts.push("2")
-  if (fromItalic !== toItalic && toItalic) parts.push("3")
-  if (fromUnderline !== toUnderline && toUnderline) parts.push("4")
-  if (fromStrikethrough !== toStrikethrough && toStrikethrough) parts.push("9")
-  if (fromReverse !== toReverse && toReverse) parts.push("7")
-
-  // Colors: emit full color spec when changed
-  if (!colorEqual(from.foreground, to.foreground) || !codeEqual(from.fgCode, to.fgCode)) {
-    if (to.fgCode != null) {
-      parts.push(String(to.fgCode))
-    } else if (to.foreground) {
-      parts.push(`38;2;${hexToRgb(to.foreground)}`)
-    } else {
-      parts.push("39")
+  if (!!from.italic !== !!to.italic && to.italic) parts.push("3")
+  if (fromUL !== toUL && toUL !== "none") {
+    switch (toUL) {
+      case "double": parts.push("4:2"); break
+      case "curly": parts.push("4:3"); break
+      case "dotted": parts.push("4:4"); break
+      case "dashed": parts.push("4:5"); break
+      default: parts.push("4")
     }
   }
+  if (!!from.strikethrough !== !!to.strikethrough && to.strikethrough) parts.push("9")
+  if (!!from.reverse !== !!to.reverse && to.reverse) parts.push("7")
+  if (!!from.blink !== !!to.blink && to.blink) parts.push("5")
+  if (!!from.conceal !== !!to.conceal && to.conceal) parts.push("8")
 
+  // Foreground
+  if (!colorEqual(from.foreground, to.foreground) || !codeEqual(from.fgCode, to.fgCode)) {
+    if (to.fgCode != null) parts.push(String(to.fgCode))
+    else if (to.foreground) parts.push(`38;2;${hexToRgb(to.foreground)}`)
+    else parts.push("39")
+  }
+
+  // Background
   if (!colorEqual(from.background, to.background) || !codeEqual(from.bgCode, to.bgCode)) {
-    if (to.bgCode != null) {
-      parts.push(String(to.bgCode))
-    } else if (to.background) {
-      parts.push(`48;2;${hexToRgb(to.background)}`)
-    } else {
-      parts.push("49")
-    }
+    if (to.bgCode != null) parts.push(String(to.bgCode))
+    else if (to.background) parts.push(`48;2;${hexToRgb(to.background)}`)
+    else parts.push("49")
+  }
+
+  // Underline color
+  if (!colorEqual(from.underlineColor, to.underlineColor)) {
+    if (to.underlineColor) parts.push(`58;2;${hexToRgb(to.underlineColor)}`)
+    else parts.push("59")
   }
 
   if (parts.length === 0) return ""
@@ -283,12 +317,16 @@ export function stylesEqual(a: Style | null, b: Style | null): boolean {
   return (
     !!a.bold === !!b.bold &&
     !!a.italic === !!b.italic &&
-    !!a.underline === !!b.underline &&
+    (a.underline ?? "none") === (b.underline ?? "none") &&
     !!a.strikethrough === !!b.strikethrough &&
     !!a.dim === !!b.dim &&
     !!a.reverse === !!b.reverse &&
+    !!a.blink === !!b.blink &&
+    !!a.rapidBlink === !!b.rapidBlink &&
+    !!a.conceal === !!b.conceal &&
     colorEqual(a.foreground, b.foreground) &&
     colorEqual(a.background, b.background) &&
+    colorEqual(a.underlineColor, b.underlineColor) &&
     codeEqual(a.fgCode, b.fgCode) &&
     codeEqual(a.bgCode, b.bgCode)
   )

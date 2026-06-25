@@ -13,8 +13,12 @@ export {
 export {
   type Style,
   type StyledSpan,
+  type Underline,
   StyledString,
   styleToString,
+  styleDiff,
+  stylesEqual,
+  isStyleEmpty,
   stripAnsi,
 } from "./styled"
 
