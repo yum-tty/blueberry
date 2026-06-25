@@ -269,6 +269,15 @@ export {
   ProgressBarDefault, ProgressBarError, ProgressBarIndeterminate,
   ProgressBarNone, ProgressBarState, ProgressBarWarning,
   NewStyledString,
+  NewBuffer, NewScreenBuffer, NewRenderBuffer, NewLine,
+  NewTerminal, NewTerminalReader, NewTerminalRenderer, NewTerminalScreen, NewConsole,
+  ReadStyle, ProgressBar, WinCon, KeyboardEnhancements,
+  Clear, ClearArea, Clone, CloneArea, Fill, FillArea,
+  type ClipboardEventType,
+  type UnknownApcEventType, type UnknownCsiEventType, type UnknownDcsEventType,
+  type UnknownEventType, type UnknownOscEventType, type UnknownPmEventType,
+  type UnknownSosEventType, type UnknownSs3EventType,
+  type TerminalReader, type TerminalScreen,
 } from "./compat"
 
 export type {

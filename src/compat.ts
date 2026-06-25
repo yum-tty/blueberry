@@ -249,6 +249,74 @@ export function NewContext(): any { return null }
 export function NewCancelReader(): any { return null }
 export function NewStyledString(str: string): any { return { text: str, wrap: false, tail: "" } }
 
+// ── Buffer factory functions ──
+import { ScreenBuffer } from "./buffer"
+export function NewBuffer(w: number, h: number): ScreenBuffer { return new ScreenBuffer(w, h) }
+export function NewScreenBuffer(w: number, h: number): ScreenBuffer { return new ScreenBuffer(w, h) }
+export function NewRenderBuffer(w: number, h: number): ScreenBuffer { return new ScreenBuffer(w, h) }
+export function NewLine(width: number): any[] { return Array(width).fill({ char: " ", style: null, width: 1 }) }
+
+// ── Terminal factory functions ──
+export function NewTerminal(): any { return null }
+export function NewTerminalReader(): any { return null }
+export function NewTerminalRenderer(): any { return null }
+export function NewTerminalScreen(): any { return null }
+export function NewConsole(): any { return null }
+
+// ── ReadStyle ──
+export function ReadStyle(params: string, pen: any): any { return pen }
+
+// ── ProgressBar ──
+export const ProgressBar = { Default: "default", Error: "error", Indeterminate: "indeterminate", None: "none", State: "state", Warning: "warning" }
+
+// ── WinCon ──
+export const WinCon = null
+
+// ── KeyboardEnhancements ──
+export const KeyboardEnhancements = { ReportEventTypes: false, ReportAlternateKeys: false, ReportAllKeysAsEscapeCodes: false, ReportAssociatedText: false }
+
+// ── Buffer standalone functions (Go: Clear(buf, area) wrappers) ──
+export function Clear(buf: ScreenBuffer): void { buf.clear() }
+export function ClearArea(buf: ScreenBuffer, area: Rectangle): void {
+  for (let y = area.minY; y < area.maxY; y++) {
+    for (let x = area.minX; x < area.maxX; x++) {
+      buf.setCell(x, y, { char: " ", style: null, width: 1 })
+    }
+  }
+}
+export function Clone(buf: ScreenBuffer): ScreenBuffer { return buf.clone() }
+export function CloneArea(buf: ScreenBuffer, area: Rectangle): ScreenBuffer {
+  const clone = new ScreenBuffer(area.maxX - area.minX, area.maxY - area.minY)
+  for (let y = area.minY; y < area.maxY; y++) {
+    for (let x = area.minX; x < area.maxX; x++) {
+      const cell = buf.getCell(x, y)
+      if (cell) clone.setCell(x - area.minX, y - area.minY, { ...cell })
+    }
+  }
+  return clone
+}
+export function Fill(buf: ScreenBuffer, x: number, y: number, w: number, h: number, cell: any): void {
+  buf.fill(x, y, w, h, cell?.char ?? " ", cell?.style ?? null)
+}
+export function FillArea(buf: ScreenBuffer, area: Rectangle, cell: any): void {
+  Fill(buf, area.minX, area.minY, area.maxX - area.minX, area.maxY - area.minY, cell)
+}
+
+// ── Terminal types ──
+export interface TerminalReader {}
+export interface TerminalScreen {}
+
+// ── Event types (runtime-compatible) ──
+export interface ClipboardEventType { type: "clipboard"; data: string; selection: string }
+export interface UnknownApcEventType { type: "unknownApc"; data: string }
+export interface UnknownCsiEventType { type: "unknownCsi"; data: string }
+export interface UnknownDcsEventType { type: "unknownDcs"; data: string }
+export interface UnknownEventType { type: "unknown"; data: string }
+export interface UnknownOscEventType { type: "unknownOsc"; data: string }
+export interface UnknownPmEventType { type: "unknownPm"; data: string }
+export interface UnknownSosEventType { type: "unknownSos"; data: string }
+export interface UnknownSs3EventType { type: "unknownSs3"; data: string }
+
 // ── Drawable ──
 export interface Drawable { draw(buf: any, area: any): void }
 export type DrawableFunc = (buf: any, area: any) => void
