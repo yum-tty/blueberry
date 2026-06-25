@@ -260,8 +260,111 @@ export function NewTerminalRenderer(): any { return null }
 export function NewTerminalScreen(): any { return null }
 export function NewConsole(): any { return null }
 
-// ── ReadStyle ──
-export function ReadStyle(params: string, pen: any): any { return pen }
+// ── ReadLink — parse OSC 8 hyperlink escape ──
+// Go: func ReadLink(p []byte, link *Link)
+// OSC 8 data: "params;URL" or ";URL"
+export function ReadLink(data: string, link: { url: string; params: string }): void {
+  const semi = data.indexOf(";")
+  if (semi === -1) return
+  link.params = data.substring(0, semi)
+  link.url = data.substring(semi + 1)
+}
+
+// ── ReadStyle — parse SGR parameters into Style ──
+// Go: func ReadStyle(params []int, pen *Style)
+export function ReadStyle(params: number[], pen: any): void {
+  let i = 0
+  while (i < params.length) {
+    const p = params[i]
+    if (p === 0) {
+      // Reset
+      pen.bold = false
+      pen.faint = false
+      pen.italic = false
+      pen.blink = false
+      pen.reverse = false
+      pen.strikethrough = false
+      pen.conceal = false
+      pen.underline = "none"
+      pen.foreground = undefined
+      pen.background = undefined
+      pen.underlineColor = undefined
+    } else if (p === 1) pen.bold = true
+    else if (p === 2) pen.faint = true
+    else if (p === 3) pen.italic = true
+    else if (p === 4) {
+      // Underline with sub-params
+      if (i + 1 < params.length && params[i + 1] !== undefined) {
+        const sub = params[i + 1]
+        if (sub === 2) pen.underline = "double"
+        else if (sub === 3) pen.underline = "curly"
+        else if (sub === 4) pen.underline = "dotted"
+        else if (sub === 5) pen.underline = "dashed"
+        else pen.underline = "single"
+        i++
+      } else {
+        pen.underline = "single"
+      }
+    }
+    else if (p === 5) pen.blink = true
+    else if (p === 6) pen.rapidBlink = true
+    else if (p === 7) pen.reverse = true
+    else if (p === 8) pen.conceal = true
+    else if (p === 9) pen.strikethrough = true
+    else if (p === 22) { pen.bold = false; pen.faint = false }
+    else if (p === 23) pen.italic = false
+    else if (p === 24) pen.underline = "none"
+    else if (p === 25) pen.blink = false
+    else if (p === 27) pen.reverse = false
+    else if (p === 28) pen.conceal = false
+    else if (p === 29) pen.strikethrough = false
+    else if (p >= 30 && p <= 37) pen.fgCode = p
+    else if (p === 38) {
+      // Extended foreground: 38;5;N or 38;2;R;G;B
+      if (i + 1 < params.length && params[i + 1] === 5 && i + 2 < params.length) {
+        pen.fgCode = p
+        i += 2
+      } else if (i + 1 < params.length && params[i + 1] === 2 && i + 4 <= params.length) {
+        const r = params[i + 2] ?? 0, g = params[i + 3] ?? 0, b = params[i + 4] ?? 0
+        pen.foreground = `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`
+        i += 4
+      } else if (i + 3 < params.length) {
+        const r = params[i + 1] ?? 0, g = params[i + 2] ?? 0, b = params[i + 3] ?? 0
+        pen.foreground = `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`
+        i += 3
+      }
+    }
+    else if (p === 39) pen.foreground = undefined
+    else if (p >= 40 && p <= 47) pen.bgCode = p
+    else if (p === 48) {
+      if (i + 1 < params.length && params[i + 1] === 5 && i + 2 < params.length) {
+        pen.bgCode = p
+        i += 2
+      } else if (i + 1 < params.length && params[i + 1] === 2 && i + 4 <= params.length) {
+        const r = params[i + 2] ?? 0, g = params[i + 3] ?? 0, b = params[i + 4] ?? 0
+        pen.background = `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`
+        i += 4
+      } else if (i + 3 < params.length) {
+        const r = params[i + 1] ?? 0, g = params[i + 2] ?? 0, b = params[i + 3] ?? 0
+        pen.background = `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`
+        i += 3
+      }
+    }
+    else if (p === 49) pen.background = undefined
+    else if (p === 58) {
+      // Underline color: 58;2;R;G;B
+      if (i + 3 < params.length) {
+        const r = params[i + 1] ?? 0, g = params[i + 2] ?? 0, b = params[i + 3] ?? 0
+        pen.underlineColor = `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`
+        i += 3
+      }
+    }
+    else if (p === 59) pen.underlineColor = undefined
+    else if (p >= 90 && p <= 97) pen.fgCode = p
+    else if (p >= 100 && p <= 107) pen.bgCode = p
+    i++
+  }
+}
 
 // ── ProgressBar ──
 export const ProgressBar = { Default: "default", Error: "error", Indeterminate: "indeterminate", None: "none", State: "state", Warning: "warning" }
