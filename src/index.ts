@@ -3,11 +3,14 @@
 // ── Core exports ──
 export {
   type Cell,
+  type WidthMethod,
+  NewCell,
   newCell,
   emptyCell,
   EmptyCell,
   isZero,
   cellEquals,
+  cellClone,
 } from "./cell"
 
 export {
@@ -248,7 +251,7 @@ export {
   MarkdownBorder, ASCIIBorder,
   Rect, NewLink, ReadLink, ConvertLink,
   ConvertStyle, StyleDiff,
-  NewCell, TrimSpace, Logger, Environ,
+  TrimSpace, Logger, Environ,
   EncodeBackgroundColor, EncodeBracketedPaste, EncodeCursorColor,
   EncodeCursorStyle, EncodeForegroundColor, EncodeKeyboardEnhancements,
   EncodeMouseEncoding, EncodeMouseMode, EncodeProgressBar, EncodeWindowTitle,

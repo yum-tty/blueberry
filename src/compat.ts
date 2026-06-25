@@ -133,9 +133,6 @@ export function StyleDiff(from: CellStyle | null, to: CellStyle | null): string 
 
 // ── Cell ops ──
 import { emptyCell, type Cell } from "./cell"
-export function NewCell(char: string, style?: CellStyle): Cell {
-  return { char, style: style ?? null, width: 1 }
-}
 export { emptyCell as EmptyCell }
 
 // ── WidthMethod ──

@@ -4,160 +4,107 @@ import type { Style } from "./styled"
 import { stylesEqual } from "./styled"
 
 /**
- * Cell represents a single cell in the terminal.
- * Matches Go ultraviolet's Cell struct.
+ * WidthMethod calculates the display width of a string.
+ * Go: type WidthMethod interface { StringWidth(string) int }
+ */
+export type WidthMethod = (s: string) => number
+
+/**
+ * Default width method using Unicode ranges.
+ */
+const defaultWidthMethod: WidthMethod = (s: string) => {
+  if (s.length === 0) return 0
+  const code = s.codePointAt(0)!
+  if (
+    (code >= 0x4E00 && code <= 0x9FFF) || (code >= 0x3000 && code <= 0x303F) ||
+    (code >= 0x3040 && code <= 0x309F) || (code >= 0x30A0 && code <= 0x30FF) ||
+    (code >= 0xFF00 && code <= 0xFFEF) || (code >= 0x2E80 && code <= 0x2EFF) ||
+    (code >= 0x3100 && code <= 0x312F) || (code >= 0x3130 && code <= 0x318F) ||
+    (code >= 0xAC00 && code <= 0xD7AF) || (code >= 0xF900 && code <= 0xFAFF) ||
+    (code >= 0xFE30 && code <= 0xFE4F) || (code >= 0x20000 && code <= 0x2A6DF) ||
+    (code >= 0x2A700 && code <= 0x2B73F) || (code >= 0x2B740 && code <= 0x2B81F) ||
+    (code >= 0x2B820 && code <= 0x2CEAF) || (code >= 0x2CEB0 && code <= 0x2EBEF) ||
+    (code >= 0x30000 && code <= 0x3134F) ||
+    (code >= 0x1F600 && code <= 0x1F64F) || (code >= 0x1F300 && code <= 0x1F5FF) ||
+    (code >= 0x1F680 && code <= 0x1F6FF) || (code >= 0x1F900 && code <= 0x1F9FF) ||
+    (code >= 0x1FA00 && code <= 0x1FA6F) || (code >= 0x1FA70 && code <= 0x1FAFF) ||
+    (code >= 0x2600 && code <= 0x26FF) || (code >= 0x2700 && code <= 0x27BF)
+  ) return 2
+  return 1
+}
+
+/**
+ * Cell represents a single cell in the terminal screen.
+ * Go: type Cell struct { Content string; Style Style; Link Link; Width int }
  */
 export interface Cell {
-  char: string
-  style: Style | null
-  width: number
-  link?: string
-  linkParams?: string
+  Content: string
+  Style: Style | null
+  Link?: string
+  LinkParams?: string
+  Width: number
 }
 
 /**
  * Create a new cell from a grapheme cluster.
  * Go: NewCell(method WidthMethod, gr string) *Cell
  */
+export function NewCell(method: WidthMethod, gr: string): Cell | null {
+  if (gr.length === 0) return null
+  if (gr === " ") return EmptyCell()
+  return { Content: gr, Style: null, Width: method(gr) }
+}
+
+/**
+ * Create a new cell (simplified, no WidthMethod).
+ */
 export function newCell(char: string, style: Style | null = null): Cell {
-  return {
-    char,
-    style,
-    width: getCharWidth(char),
-  }
+  return { Content: char, Style: style, Width: defaultWidthMethod(char) }
 }
 
 /**
  * Create an empty cell.
  */
 export function emptyCell(): Cell {
-  return { char: " ", style: null, width: 1 }
+  return { Content: " ", Style: null, Width: 1 }
 }
+
+/**
+ * EmptyCell constant — a cell with a single space, width of 1, no style.
+ */
+export const EmptyCell = (): Cell => ({ Content: " ", Style: null, Width: 1 })
 
 /**
  * Check if a cell is zero/empty.
  */
 export function isZero(cell: Cell): boolean {
-  return (
-    cell.char === "" &&
-    cell.width === 0 &&
-    cell.style === null &&
-    !cell.link &&
-    !cell.linkParams
-  )
+  return cell.Content === "" && cell.Width === 0 && cell.Style === null && !cell.Link && !cell.LinkParams
 }
 
 /**
- * Deep comparison of two cells including style fields.
+ * Deep comparison of two cells.
  * Go: Cell.Equal checks Content, Width, Style.Equal, Link.Equal
  */
 export function cellEquals(a: Cell, b: Cell): boolean {
   return (
-    a.char === b.char &&
-    a.width === b.width &&
-    stylesEqual(a.style, b.style) &&
-    (a.link ?? "") === (b.link ?? "") &&
-    (a.linkParams ?? "") === (b.linkParams ?? "")
+    a.Content === b.Content &&
+    a.Width === b.Width &&
+    stylesEqual(a.Style, b.Style) &&
+    (a.Link ?? "") === (b.Link ?? "") &&
+    (a.LinkParams ?? "") === (b.LinkParams ?? "")
   )
 }
 
 /**
- * Create a new cell.
+ * Clone returns a deep copy of the cell.
+ * Go: Cell.Clone() *Cell
  */
-export function newCell(char: string, style: Style | null = null): Cell {
+export function cellClone(cell: Cell): Cell {
   return {
-    char,
-    style,
-    width: getCharWidth(char),
+    Content: cell.Content,
+    Style: cell.Style ? { ...cell.Style } : null,
+    Width: cell.Width,
+    Link: cell.Link,
+    LinkParams: cell.LinkParams,
   }
-}
-
-/**
- * Create an empty cell.
- */
-export function emptyCell(): Cell {
-  return { char: " ", style: null, width: 1 }
-}
-
-/**
- * EmptyCell is a cell with a single space, width of 1, and no style (Go-compatible).
- */
-export const EmptyCell: Cell = { char: " ", style: null, width: 1 }
-
-/**
- * Check if a cell is zero/empty. Matches Go's `*c == Cell{}` which checks
- * all fields are their zero values: Content=="", Width==0, Style==zero, Link==zero.
- */
-export function isZero(cell: Cell): boolean {
-  return (
-    cell.char === "" &&
-    cell.width === 0 &&
-    cell.style === null &&
-    !cell.link &&
-    !cell.linkParams
-  )
-}
-
-/**
- * Compare two cells. Matches Go's Cell.Equal which checks Content, Width,
- * Style, and Link.
- */
-export function cellEquals(a: Cell, b: Cell): boolean {
-  return (
-    a.char === b.char &&
-    a.width === b.width &&
-    stylesEqual(a.style, b.style) &&
-    (a.link ?? "") === (b.link ?? "") &&
-    (a.linkParams ?? "") === (b.linkParams ?? "")
-  )
-}
-
-/**
- * Get the width of a character.
- */
-function getCharWidth(char: string): number {
-  if (char.length === 0) return 0
-
-  const code = char.codePointAt(0)!
-
-  // CJK characters
-  if (
-    (code >= 0x4E00 && code <= 0x9FFF) || // CJK Unified Ideographs
-    (code >= 0x3000 && code <= 0x303F) || // CJK Symbols and Punctuation
-    (code >= 0x3040 && code <= 0x309F) || // Hiragana
-    (code >= 0x30A0 && code <= 0x30FF) || // Katakana
-    (code >= 0xFF00 && code <= 0xFFEF) || // Fullwidth Forms
-    (code >= 0x2E80 && code <= 0x2EFF) || // CJK Radicals
-    (code >= 0x3100 && code <= 0x312F) || // Bopomofo
-    (code >= 0x3130 && code <= 0x318F) || // Hangul Compatibility Jamo
-    (code >= 0xAC00 && code <= 0xD7AF) || // Hangul Syllables
-    (code >= 0xF900 && code <= 0xFAFF) || // CJK Compatibility Ideographs
-    (code >= 0xFE30 && code <= 0xFE4F) || // CJK Compatibility Forms
-    (code >= 0x20000 && code <= 0x2A6DF) || // CJK Unified Ideographs Extension B
-    (code >= 0x2A700 && code <= 0x2B73F) || // CJK Unified Ideographs Extension C
-    (code >= 0x2B740 && code <= 0x2B81F) || // CJK Unified Ideographs Extension D
-    (code >= 0x2B820 && code <= 0x2CEAF) || // CJK Unified Ideographs Extension E
-    (code >= 0x2CEB0 && code <= 0x2EBEF) || // CJK Unified Ideographs Extension F
-    (code >= 0x30000 && code <= 0x3134F) // CJK Unified Ideographs Extension G
-  ) {
-    return 2
-  }
-
-  // Emoji
-  if (
-    (code >= 0x1F600 && code <= 0x1F64F) || // Emoticons
-    (code >= 0x1F300 && code <= 0x1F5FF) || // Misc Symbols and Pictographs
-    (code >= 0x1F680 && code <= 0x1F6FF) || // Transport and Map Symbols
-    (code >= 0x1F900 && code <= 0x1F9FF) || // Supplemental Symbols and Pictographs
-    (code >= 0x1FA00 && code <= 0x1FA6F) || // Chess Symbols
-    (code >= 0x1FA70 && code <= 0x1FAFF) || // Symbols and Pictographs Extended-A
-    (code >= 0x2600 && code <= 0x26FF) || // Misc Symbols
-    (code >= 0x2700 && code <= 0x27BF) || // Dingbats
-    (code >= 0xFE00 && code <= 0xFE0F) || // Variation Selectors
-    (code >= 0x200D && code <= 0x200D) // Zero Width Joiner
-  ) {
-    return 2
-  }
-
-  return 1
 }

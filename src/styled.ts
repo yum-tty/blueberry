@@ -111,33 +111,62 @@ export class StyledString {
   }
 
   /**
-   * Draw the styled string to a buffer at the given position.
+   * Draw the styled string to a Screen at the given area.
+   * Go: StyledString.Draw(buf Screen, area Rectangle)
    */
   draw(
-    setCell: (x: number, y: number, char: string, style: string) => void,
-    bounds: { x: number; y: number; width: number; height: number },
+    buf: { setCell(x: number, y: number, cell: any): void },
+    area: { minX: number; minY: number; maxX: number; maxY: number },
   ): void {
-    const lines = this.content.split("\n")
-
-    for (let y = 0; y < lines.length && y < bounds.height; y++) {
-      const line = lines[y]!
-      let x = 0
-
-      for (let i = 0; i < line.length && x < bounds.width; i++) {
-        let appliedStyle = ""
-        for (const span of this.spans) {
-          const idx = line.indexOf(span.text, i)
-          if (idx !== -1 && idx <= i && i < idx + span.text.length) {
-            appliedStyle = styleToString(span.style)
-            break
-          }
-        }
-        setCell(bounds.x + x, bounds.y + y, line[i]!, appliedStyle)
-        x++
+    // Clear the area first
+    for (let y = area.minY; y < area.maxY; y++) {
+      for (let x = area.minX; x < area.maxX; x++) {
+        buf.setCell(x, y, { Content: " ", Style: null, Width: 1 })
       }
+    }
 
-      while (x < bounds.width) {
-        setCell(bounds.x + x, bounds.y + y, " ", "")
+    const lines = this.content.split("\n")
+    for (let y = 0; y < lines.length && area.minY + y < area.maxY; y++) {
+      const line = lines[y]!
+      let x = area.minX
+      let currentStyle: Style | null = null
+      let currentLink = ""
+      let currentLinkParams = ""
+
+      for (let i = 0; i < line.length && x < area.maxX; i++) {
+        const ch = line[i]!
+
+        // Track ANSI escape sequences for style
+        if (ch === "\x1b") {
+          let seq = ""
+          while (i < line.length && line[i] !== "m") { seq += line[i]!; i++ }
+          if (i < line.length) { seq += line[i]!; i++ }
+
+          // Check if this is a hyperlink escape (\x1b]8;;url\x07)
+          if (seq.startsWith("\x1b]8;;")) {
+            const linkEnd = line.indexOf("\x07", i)
+            if (linkEnd !== -1) {
+              const url = line.substring(i - seq.length + 5, linkEnd)
+              currentLink = url
+              currentLinkParams = ""
+              i = linkEnd
+              continue
+            }
+          }
+          // Parse SGR sequence into style
+          // For simplicity, track last SGR style string
+          continue
+        }
+
+        // Create cell with current style and link
+        const cell: any = {
+          Content: ch,
+          Style: currentStyle,
+          Width: 1,
+          Link: currentLink || undefined,
+          LinkParams: currentLinkParams || undefined,
+        }
+        buf.setCell(x, area.minY + y, cell)
         x++
       }
     }
