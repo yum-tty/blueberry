@@ -19,6 +19,8 @@ export class TerminalRenderer {
   private cursorVisible: boolean = false
   private altScreen: boolean = false
   private syncdUpdates: boolean = false
+  private oldLineHashes: number[] = []
+  private newLineHashes: number[] = []
 
   constructor(output: NodeJS.WriteStream = process.stdout) {
     this.output = output
@@ -48,6 +50,7 @@ export class TerminalRenderer {
    */
   render(view: string): void {
     this.parseView(view)
+    this.computeLineHashes()
     this.diffAndRender()
   }
 
@@ -106,6 +109,21 @@ export class TerminalRenderer {
   }
 
   /**
+   * Compute hashes for each line in the current buffer.
+   */
+  private computeLineHashes(): void {
+    this.newLineHashes = []
+    for (let y = 0; y < this.height; y++) {
+      const cells: Cell[] = []
+      for (let x = 0; x < this.width; x++) {
+        const cell = this.currBuffer.getCell(x, y)
+        if (cell) cells.push(cell)
+      }
+      this.newLineHashes.push(hashLine(cells))
+    }
+  }
+
+  /**
    * Compare buffers and render changes. Uses incremental style diffing
    * matching Go's StyleDiff for minimal ANSI transitions.
    */
@@ -114,6 +132,10 @@ export class TerminalRenderer {
     let changes = 0
 
     for (let y = 0; y < this.height; y++) {
+      if (y < this.oldLineHashes.length && this.oldLineHashes[y] === this.newLineHashes[y] && this.newLineHashes[y] !== 0) {
+        continue
+      }
+
       let pen: Style | null = null
 
       for (let x = 0; x < this.width; x++) {
@@ -160,6 +182,7 @@ export class TerminalRenderer {
     const temp = this.prevBuffer
     this.prevBuffer = this.currBuffer
     this.currBuffer = temp
+    this.oldLineHashes = this.newLineHashes.slice()
   }
 
   /**
@@ -169,6 +192,8 @@ export class TerminalRenderer {
     this.write(`${CSI}2J${CSI}H`)
     this.prevBuffer.clear()
     this.currBuffer.clear()
+    this.oldLineHashes = []
+    this.newLineHashes = []
   }
 
   /**
@@ -408,4 +433,37 @@ function hexFrom256(idx: number): string {
   }
   const gray = 8 + (idx - 232) * 10
   return gray.toString(16).padStart(2, "0") + gray.toString(16).padStart(2, "0") + gray.toString(16).padStart(2, "0")
+}
+
+function hashLine(cells: Cell[]): number {
+  let hash = 5381
+  for (const cell of cells) {
+    for (let i = 0; i < cell.Content.length; i++) {
+      hash = ((hash << 5) + hash + cell.Content.charCodeAt(i)) | 0
+    }
+    if (cell.Style) {
+      if (cell.Style.bold) hash = ((hash << 5) + hash + 1) | 0
+      if (cell.Style.italic) hash = ((hash << 5) + hash + 2) | 0
+      if (cell.Style.underline) hash = ((hash << 5) + hash + 3) | 0
+      if (cell.Style.dim) hash = ((hash << 5) + hash + 4) | 0
+      if (cell.Style.reverse) hash = ((hash << 5) + hash + 5) | 0
+      if (cell.Style.strikethrough) hash = ((hash << 5) + hash + 6) | 0
+      if (cell.Style.foreground) {
+        for (let i = 0; i < cell.Style.foreground.length; i++) {
+          hash = ((hash << 5) + hash + cell.Style.foreground.charCodeAt(i)) | 0
+        }
+      }
+      if (cell.Style.background) {
+        for (let i = 0; i < cell.Style.background.length; i++) {
+          hash = ((hash << 5) + hash + cell.Style.background.charCodeAt(i)) | 0
+        }
+      }
+    }
+    if (cell.Link.URL) {
+      for (let i = 0; i < cell.Link.URL.length; i++) {
+        hash = ((hash << 5) + hash + cell.Link.URL.charCodeAt(i)) | 0
+      }
+    }
+  }
+  return hash
 }
