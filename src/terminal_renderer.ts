@@ -3,6 +3,7 @@
 import { ScreenBuffer } from "./buffer"
 import { type Cell, cellEquals, isZero } from "./cell"
 import { type Style, styleToString, styleDiff, isStyleEmpty, stylesEqual } from "./styled"
+import { type ColorProfile } from "./compat"
 
 const ESC = "\x1b"
 const CSI = `${ESC}[`
@@ -19,6 +20,14 @@ export class TerminalRenderer {
   private cursorVisible: boolean = false
   private altScreen: boolean = false
   private syncdUpdates: boolean = false
+  private fullscreen: boolean = false
+  private relativeCursor: boolean = false
+  private cursorX: number = 0
+  private cursorY: number = 0
+  private savedCursorX: number = 0
+  private savedCursorY: number = 0
+  private pendingOutput: string = ""
+  private colorProfile: ColorProfile = "truecolor"
   private oldLineHashes: number[] = []
   private newLineHashes: number[] = []
 
@@ -170,13 +179,7 @@ export class TerminalRenderer {
     }
 
     if (changes > 0) {
-      if (this.syncdUpdates) {
-        this.output.write(`${CSI}?2026h`)
-      }
-      this.output.write(buffer)
-      if (this.syncdUpdates) {
-        this.output.write(`${CSI}?2026l`)
-      }
+      this.pendingOutput += buffer
     }
 
     const temp = this.prevBuffer
@@ -231,6 +234,70 @@ export class TerminalRenderer {
       width: this.output.columns || 80,
       height: this.output.rows || 24,
     }
+  }
+
+  setFullscreen(on: boolean): void {
+    this.fullscreen = on
+  }
+
+  setRelativeCursor(on: boolean): void {
+    this.relativeCursor = on
+  }
+
+  setColorProfile(profile: ColorProfile): void {
+    this.colorProfile = profile
+  }
+
+  resize(width: number, height: number): void {
+    this.width = width
+    this.height = height
+    this.prevBuffer.resize(width, height)
+    this.currBuffer.resize(width, height)
+  }
+
+  erase(): void {
+    this.prevBuffer.clear()
+    this.currBuffer.clear()
+    this.oldLineHashes = []
+    this.newLineHashes = []
+  }
+
+  saveCursor(): void {
+    this.savedCursorX = this.cursorX
+    this.savedCursorY = this.cursorY
+  }
+
+  restoreCursor(): void {
+    this.cursorX = this.savedCursorX
+    this.cursorY = this.savedCursorY
+  }
+
+  getPosition(): { x: number; y: number } {
+    return { x: this.cursorX, y: this.cursorY }
+  }
+
+  setPosition(x: number, y: number): void {
+    this.cursorX = x
+    this.cursorY = y
+  }
+
+  getPendingOutput(): string {
+    const out = this.pendingOutput
+    this.pendingOutput = ""
+    return out
+  }
+
+  renderFromBuffer(buffer: ScreenBuffer): void {
+    for (let y = 0; y < this.height; y++) {
+      for (let x = 0; x < this.width; x++) {
+        const cell = buffer.getCell(x, y)
+        if (cell) {
+          this.currBuffer.setCell(x, y, cell)
+        }
+      }
+    }
+    this.computeLineHashes()
+    this.diffAndRender()
   }
 
   /**

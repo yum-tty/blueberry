@@ -286,6 +286,10 @@ export {
   type TerminalOptions,
 } from "./terminal"
 
+export {
+  TerminalScreen,
+} from "./screen/terminal_screen"
+
 // ── Ultraviolet-compatible re-exports ──
 export {
   AttrBold, AttrFaint, AttrItalic, AttrBlink, AttrRapidBlink,
@@ -338,7 +342,7 @@ export {
   ProgressBar, WinCon, KeyboardEnhancements,
   Clear, ClearArea, Clone, CloneArea, Fill, FillArea,
   type ClipboardEventType,
-  type TerminalReader, type TerminalScreen,
+  type TerminalReader,
 } from "./compat"
 
 export type {
