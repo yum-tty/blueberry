@@ -281,6 +281,20 @@ export {
   mousePixelToCell,
 } from "./mouse"
 
+export { keyTable } from "./key_table"
+
+export {
+  EventDecoder,
+  type DecodeResult,
+  type LegacyKeyFlags,
+  newLegacyKeyFlags,
+  legacyCtrlAt,
+  legacyCtrlI,
+  legacyCtrlM,
+  legacyCtrlOpenBracket,
+  legacyBackspace,
+} from "./decoder"
+
 export {
   Terminal,
   type TerminalOptions,
