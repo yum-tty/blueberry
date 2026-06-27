@@ -34,77 +34,139 @@ const defaultWidthMethod: WidthMethod = (s: string) => {
 }
 
 /**
+ * Link represents a hyperlink in the terminal screen.
+ * Go: type Link struct { URL string; Params string }
+ */
+export interface Link {
+  URL: string
+  Params: string
+}
+
+/**
+ * Create a new hyperlink with the given URL and parameters.
+ * Go: NewLink(url string, params ...string) Link
+ */
+export function NewLink(url: string, params: string = ""): Link {
+  return { URL: url, Params: params }
+}
+
+/**
+ * String returns a string representation of the hyperlink.
+ * Go: Link.String() string
+ */
+export function linkString(link: Link): string {
+  return link.URL
+}
+
+/**
+ * Equal returns whether the hyperlink is equal to the other hyperlink.
+ * Go: Link.Equal(o *Link) bool
+ */
+export function linkEqual(a: Link, b: Link): boolean {
+  return a.URL === b.URL && a.Params === b.Params
+}
+
+/**
+ * IsZero returns whether the hyperlink is empty.
+ * Go: Link.IsZero() bool
+ */
+export function linkIsZero(link: Link): boolean {
+  return link.URL === "" && link.Params === ""
+}
+
+/**
  * Cell represents a single cell in the terminal screen.
  * Go: type Cell struct { Content string; Style Style; Link Link; Width int }
  */
 export interface Cell {
   Content: string
   Style: Style | null
-  Link?: string
-  LinkParams?: string
+  Link: Link
   Width: number
 }
 
 /**
- * Create a new cell from a grapheme cluster.
+ * EmptyCell is a cell with a single space, width of 1, and no style or link.
+ */
+export const EmptyCell: Cell = { Content: " ", Style: null, Link: { URL: "", Params: "" }, Width: 1 }
+
+/**
+ * Create a new cell from the given string grapheme.
  * Go: NewCell(method WidthMethod, gr string) *Cell
  */
 export function NewCell(method: WidthMethod, gr: string): Cell | null {
   if (gr.length === 0) return null
-  if (gr === " ") return EmptyCell()
-  return { Content: gr, Style: null, Width: method(gr) }
+  if (gr === " ") return cellClone(EmptyCell)
+  return { Content: gr, Style: null, Link: { URL: "", Params: "" }, Width: method(gr) }
 }
 
 /**
  * Create a new cell (simplified, no WidthMethod).
  */
 export function newCell(char: string, style: Style | null = null): Cell {
-  return { Content: char, Style: style, Width: defaultWidthMethod(char) }
+  return { Content: char, Style: style, Link: { URL: "", Params: "" }, Width: defaultWidthMethod(char) }
 }
 
 /**
  * Create an empty cell.
  */
 export function emptyCell(): Cell {
-  return { Content: " ", Style: null, Width: 1 }
+  return { Content: " ", Style: null, Link: { URL: "", Params: "" }, Width: 1 }
 }
 
 /**
- * EmptyCell constant — a cell with a single space, width of 1, no style.
+ * String returns the string content of the cell excluding any styles, links,
+ * and escape sequences.
+ * Go: Cell.String() string
  */
-export const EmptyCell = (): Cell => ({ Content: " ", Style: null, Width: 1 })
-
-/**
- * Check if a cell is zero/empty.
- */
-export function isZero(cell: Cell): boolean {
-  return cell.Content === "" && cell.Width === 0 && cell.Style === null && !cell.Link && !cell.LinkParams
+export function cellString(cell: Cell): string {
+  return cell.Content
 }
 
 /**
- * Deep comparison of two cells.
- * Go: Cell.Equal checks Content, Width, Style.Equal, Link.Equal
+ * Equal returns whether the cell is equal to the other cell.
+ * Go: Cell.Equal(o *Cell) bool
  */
-export function cellEquals(a: Cell, b: Cell): boolean {
+export function cellEquals(a: Cell | null, b: Cell | null): boolean {
+  if (!a && !b) return true
+  if (!a || !b) return false
   return (
-    a.Content === b.Content &&
     a.Width === b.Width &&
+    a.Content === b.Content &&
     stylesEqual(a.Style, b.Style) &&
-    (a.Link ?? "") === (b.Link ?? "") &&
-    (a.LinkParams ?? "") === (b.LinkParams ?? "")
+    linkEqual(a.Link, b.Link)
   )
 }
 
 /**
- * Clone returns a deep copy of the cell.
+ * IsZero returns whether the cell is an empty cell.
+ * Go: Cell.IsZero() bool
+ */
+export function isZero(cell: Cell | null): boolean {
+  if (!cell) return true
+  return cell.Content === "" && cell.Width === 0 && cell.Style === null && linkIsZero(cell.Link)
+}
+
+/**
+ * Clone returns a copy of the cell.
  * Go: Cell.Clone() *Cell
  */
 export function cellClone(cell: Cell): Cell {
   return {
     Content: cell.Content,
     Style: cell.Style ? { ...cell.Style } : null,
+    Link: { ...cell.Link },
     Width: cell.Width,
-    Link: cell.Link,
-    LinkParams: cell.LinkParams,
   }
+}
+
+/**
+ * Empty makes the cell an empty cell by setting its content to a single space
+ * and width to 1.
+ * Go: Cell.Empty()
+ */
+export function cellEmpty(cell: Cell): void {
+  cell.Content = " "
+  cell.Width = 1
+  cell.Link = { URL: "", Params: "" }
 }

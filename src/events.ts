@@ -106,6 +106,11 @@ export interface SecondaryDeviceAttributesEvent {
   attrs: number[]
 }
 
+export interface TertiaryDeviceAttributesEvent {
+  type: "tertiaryDeviceAttributes"
+  value: string
+}
+
 export interface ModeReportEvent {
   type: "modeReport"
   mode: number
@@ -115,6 +120,164 @@ export interface ModeReportEvent {
 export interface UnknownEvent {
   type: "unknown"
   raw: string
+}
+
+export interface UnknownCsiEvent {
+  type: "unknownCsi"
+  data: string
+}
+
+export interface UnknownOscEvent {
+  type: "unknownOsc"
+  data: string
+}
+
+export interface UnknownDcsEvent {
+  type: "unknownDcs"
+  data: string
+}
+
+export interface UnknownSosEvent {
+  type: "unknownSos"
+  data: string
+}
+
+export interface UnknownPmEvent {
+  type: "unknownPm"
+  data: string
+}
+
+export interface UnknownApcEvent {
+  type: "unknownApc"
+  data: string
+}
+
+export interface UnknownSs3Event {
+  type: "unknownSs3"
+  data: string
+}
+
+/**
+ * Size represents the size of the terminal window.
+ * Go: type Size struct { Width, Height int }
+ */
+export interface Size {
+  width: number
+  height: number
+}
+
+/**
+ * Bounds returns the bounds corresponding to the size.
+ * Go: Size.Bounds() Rectangle
+ */
+export function sizeBounds(s: Size): { minX: number; minY: number; maxX: number; maxY: number } {
+  return { minX: 0, minY: 0, maxX: s.width, maxY: s.height }
+}
+
+/**
+ * KittyGraphicsEvent represents a Kitty Graphics response event.
+ * Go: type KittyGraphicsEvent struct { Options kitty.Options; Payload []byte }
+ * See https://sw.kovidgoyal.net/kitty/graphics-protocol/
+ */
+export interface KittyGraphicsEvent {
+  type: "kittyGraphics"
+  options: number
+  payload: Uint8Array
+}
+
+/**
+ * ForegroundColorEvent represents a foreground color event.
+ * Go: type ForegroundColorEvent struct{ color.Color }
+ */
+export interface ForegroundColorEvent {
+  type: "foregroundColor"
+  color: string | null
+}
+
+/**
+ * String returns the hex representation of the color.
+ */
+export function foregroundColorString(e: ForegroundColorEvent): string {
+  return colorToHex(e.color)
+}
+
+/**
+ * IsDark returns whether the color is dark.
+ */
+export function foregroundColorIsDark(e: ForegroundColorEvent): boolean {
+  return isDarkColor(e.color)
+}
+
+/**
+ * BackgroundColorEvent represents a background color event.
+ * Go: type BackgroundColorEvent struct{ color.Color }
+ */
+export interface BackgroundColorEvent {
+  type: "backgroundColor"
+  color: string | null
+}
+
+/**
+ * String returns the hex representation of the color.
+ */
+export function backgroundColorString(e: BackgroundColorEvent): string {
+  return colorToHex(e.color)
+}
+
+/**
+ * IsDark returns whether the color is dark.
+ */
+export function backgroundColorIsDark(e: BackgroundColorEvent): boolean {
+  return isDarkColor(e.color)
+}
+
+/**
+ * CursorColorEvent represents a cursor color change event.
+ * Go: type CursorColorEvent struct{ color.Color }
+ */
+export interface CursorColorEvent {
+  type: "cursorColor"
+  color: string | null
+}
+
+/**
+ * String returns the hex representation of the color.
+ */
+export function cursorColorString(e: CursorColorEvent): string {
+  return colorToHex(e.color)
+}
+
+/**
+ * IsDark returns whether the color is dark.
+ */
+export function cursorColorIsDark(e: CursorColorEvent): boolean {
+  return isDarkColor(e.color)
+}
+
+/**
+ * WindowOpEvent is a window operation (XTWINOPS) report event.
+ * Go: type WindowOpEvent struct { Op int; Args []int }
+ */
+export interface WindowOpEvent {
+  type: "windowOp"
+  op: number
+  args: number[]
+}
+
+/**
+ * CapabilityEvent represents a Termcap/Terminfo response event.
+ * Go: type CapabilityEvent struct { Content string }
+ */
+export interface CapabilityEvent {
+  type: "capability"
+  content: string
+}
+
+/**
+ * String returns the capability content.
+ */
+export function capabilityString(e: CapabilityEvent): string {
+  return e.content
 }
 
 export type TerminalEvent =
@@ -139,5 +302,42 @@ export type TerminalEvent =
   | KeyboardEnhancementsEvent
   | PrimaryDeviceAttributesEvent
   | SecondaryDeviceAttributesEvent
+  | TertiaryDeviceAttributesEvent
   | ModeReportEvent
+  | KittyGraphicsEvent
+  | ForegroundColorEvent
+  | BackgroundColorEvent
+  | CursorColorEvent
+  | WindowOpEvent
+  | CapabilityEvent
   | UnknownEvent
+  | UnknownCsiEvent
+  | UnknownOscEvent
+  | UnknownDcsEvent
+  | UnknownSosEvent
+  | UnknownPmEvent
+  | UnknownApcEvent
+  | UnknownSs3Event
+
+// ── Color helpers ──
+
+function colorToHex(color: string | null): string {
+  if (!color) return ""
+  return color
+}
+
+function isDarkColor(color: string | null): boolean {
+  if (!color) return true
+  const hex = color.replace("#", "")
+  if (hex.length < 6) return true
+  const r = parseInt(hex.slice(0, 2), 16)
+  const g = parseInt(hex.slice(2, 4), 16)
+  const b = parseInt(hex.slice(4, 6), 16)
+  const rNorm = r / 255
+  const gNorm = g / 255
+  const bNorm = b / 255
+  const max = Math.max(rNorm, gNorm, bNorm)
+  const min = Math.min(rNorm, gNorm, bNorm)
+  const l = (max + min) / 2
+  return l < 0.5
+}

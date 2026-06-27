@@ -41,9 +41,10 @@ export class Context {
       const line = lines[i]!
       for (let j = 0; j < line.length; j++) {
         this.buffer.setCell(this.x + j, this.y + i, {
-          char: line[j]!,
-          style: this.style,
-          width: 1,
+          Content: line[j]!,
+          Style: this.style,
+          Link: { URL: "", Params: "" },
+          Width: 1,
         })
       }
       this.y++

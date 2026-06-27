@@ -1,4 +1,4 @@
-// terminal_renderer.ts | terminal renderer (ultraviolet port)
+// renderer.ts | terminal renderer (ultraviolet port)
 
 import { ScreenBuffer } from "./buffer"
 import { type Cell, cellEquals, isZero } from "./cell"
@@ -206,6 +206,19 @@ export class TerminalRenderer {
       width: this.output.columns || 80,
       height: this.output.rows || 24,
     }
+  }
+
+  /**
+   * Resize renderer buffers to match current terminal size.
+   */
+  resize(): void {
+    const { width, height } = this.getSize()
+    if (width === this.width && height === this.height) return
+    this.width = width
+    this.height = height
+    this.prevBuffer = new ScreenBuffer(this.width, this.height)
+    this.currBuffer = new ScreenBuffer(this.width, this.height)
+    this.write(`${CSI}2J${CSI}H`)
   }
 
   /**

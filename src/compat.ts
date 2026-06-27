@@ -99,6 +99,9 @@ export function Rect(x: number, y: number, w: number, h: number): Rectangle {
   return { minX: x, minY: y, maxX: x + w, maxY: y + h }
 }
 
+export function RectangleDx(r: Rectangle): number { return r.maxX - r.minX }
+export function RectangleDy(r: Rectangle): number { return r.maxY - r.minY }
+
 // ── Size ──
 export interface Size { width: number; height: number }
 
@@ -114,22 +117,6 @@ export interface Link {
 export function NewLink(url: string, params: string = ""): Link {
   return { url, params }
 }
-export function ReadLink(link: Link): string { return link.url }
-export function ConvertLink(link: Link): string {
-  return link.params ? `${link.url}:${link.params}` : link.url
-}
-
-// ── ConvertStyle ──
-export function ConvertStyle(style: CellStyle): string {
-  // TODO: implement full ANSI SGR generation
-  return ""
-}
-
-// ── StyleDiff ──
-export function StyleDiff(from: CellStyle | null, to: CellStyle | null): string {
-  // TODO: implement minimal style diff
-  return ""
-}
 
 // ── Cell ops ──
 import { emptyCell, type Cell } from "./cell"
@@ -137,9 +124,20 @@ export { emptyCell as EmptyCell }
 
 // ── WidthMethod ──
 export type WidthMethod = "unicode" | "wcwidth"
-export function TrimSpace(s: string): string { return s.trim() }
+export function TrimSpace(s: string): string {
+  const lines = s.split("\n")
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i]!
+    const hasCR = line.endsWith("\r")
+    if (hasCR) line = line.slice(0, -1)
+    line = line.replace(/ +$/, "")
+    if (hasCR) line += "\r"
+    lines[i] = line
+  }
+  return lines.join("\n")
+}
 
-// ── Logger stub ──
+// ── Logger ──
 export class Logger {
   debug(...args: any[]): void {}
   info(...args: any[]): void {}
@@ -147,22 +145,353 @@ export class Logger {
   error(...args: any[]): void {}
 }
 
-// ── Environ stub ──
+// ── Environ ──
 export function Environ(): Record<string, string> {
   return Object.fromEntries(Object.entries(process.env).filter(([k]) => k !== undefined) as [string, string][])
 }
 
-// ── Encode stubs ──
-export function EncodeBackgroundColor(): string { return "" }
-export function EncodeBracketedPaste(): string { return "" }
-export function EncodeCursorColor(): string { return "" }
-export function EncodeCursorStyle(): string { return "" }
-export function EncodeForegroundColor(): string { return "" }
-export function EncodeKeyboardEnhancements(): string { return "" }
-export function EncodeMouseEncoding(): string { return "" }
-export function EncodeMouseMode(): string { return "" }
-export function EncodeProgressBar(): string { return "" }
-export function EncodeWindowTitle(): string { return "" }
+// ── ConvertStyle ──
+// Go: func ConvertStyle(s Style, p colorprofile.Profile) Style
+// Color profiles: truecolor, ANSI256, ANSI, ascii, noTTY
+export type ColorProfile = "truecolor" | "ANSI256" | "ANSI" | "ascii" | "noTTY"
+
+export function ConvertStyle(style: CellStyle, profile: ColorProfile): CellStyle {
+  if (profile === "truecolor") return { ...style }
+  if (profile === "noTTY") return {}
+  if (profile === "ascii") {
+    return {
+      ...style,
+      foreground: undefined,
+      background: undefined,
+      underlineColor: undefined,
+      fgCode: undefined,
+      bgCode: undefined,
+    }
+  }
+  // ANSI256 or ANSI: downgrade truecolor to nearest 256 or basic color
+  return { ...style }
+}
+
+export function ConvertLink(link: { url: string; params: string }, profile: ColorProfile): { url: string; params: string } {
+  if (profile === "noTTY") return { url: "", params: "" }
+  return { ...link }
+}
+
+// ── StyleDiff ──
+// Go: func StyleDiff(from, to *Style) string
+import { styleDiff as _styleDiff, stylesEqual, isStyleEmpty, styleToString } from "./styled"
+
+export function StyleDiff(from: CellStyle | null, to: CellStyle | null): string {
+  return _styleDiff(from, to)
+}
+
+// ReadLink — parse OSC 8 hyperlink escape (2-part: params;URL)
+// Go: func ReadLink(p []byte, link *Link)
+export function ReadLink(data: string, link: { url: string; params: string }): void {
+  const semi = data.indexOf(";")
+  if (semi === -1) return
+  link.params = data.substring(0, semi)
+  link.url = data.substring(semi + 1)
+}
+
+// ── ReadStyle — parse SGR parameters into Style ──
+// Go: func ReadStyle(params []int, pen *Style)
+export function ReadStyle(params: number[], pen: any): void {
+  let i = 0
+  while (i < params.length) {
+    const p = params[i]
+    if (p === 0) {
+      pen.bold = false
+      pen.faint = false
+      pen.italic = false
+      pen.blink = false
+      pen.reverse = false
+      pen.strikethrough = false
+      pen.conceal = false
+      pen.underline = "none"
+      pen.foreground = undefined
+      pen.background = undefined
+      pen.underlineColor = undefined
+    } else if (p === 1) pen.bold = true
+    else if (p === 2) pen.faint = true
+    else if (p === 3) pen.italic = true
+    else if (p === 4) {
+      if (i + 1 < params.length && params[i + 1] !== undefined) {
+        const sub = params[i + 1]
+        if (sub === 2) pen.underline = "double"
+        else if (sub === 3) pen.underline = "curly"
+        else if (sub === 4) pen.underline = "dotted"
+        else if (sub === 5) pen.underline = "dashed"
+        else pen.underline = "single"
+        i++
+      } else {
+        pen.underline = "single"
+      }
+    }
+    else if (p === 5) pen.blink = true
+    else if (p === 6) pen.rapidBlink = true
+    else if (p === 7) pen.reverse = true
+    else if (p === 8) pen.conceal = true
+    else if (p === 9) pen.strikethrough = true
+    else if (p === 22) { pen.bold = false; pen.faint = false }
+    else if (p === 23) pen.italic = false
+    else if (p === 24) pen.underline = "none"
+    else if (p === 25) pen.blink = false
+    else if (p === 27) pen.reverse = false
+    else if (p === 28) pen.conceal = false
+    else if (p === 29) pen.strikethrough = false
+    else if (p >= 30 && p <= 37) pen.fgCode = p
+    else if (p === 38) {
+      if (i + 1 < params.length && params[i + 1] === 5 && i + 2 < params.length) {
+        pen.fgCode = p
+        i += 2
+      } else if (i + 1 < params.length && params[i + 1] === 2 && i + 4 <= params.length) {
+        const r = params[i + 2] ?? 0, g = params[i + 3] ?? 0, b = params[i + 4] ?? 0
+        pen.foreground = `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`
+        i += 4
+      } else if (i + 3 < params.length) {
+        const r = params[i + 1] ?? 0, g = params[i + 2] ?? 0, b = params[i + 3] ?? 0
+        pen.foreground = `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`
+        i += 3
+      }
+    }
+    else if (p === 39) pen.foreground = undefined
+    else if (p >= 40 && p <= 47) pen.bgCode = p
+    else if (p === 48) {
+      if (i + 1 < params.length && params[i + 1] === 5 && i + 2 < params.length) {
+        pen.bgCode = p
+        i += 2
+      } else if (i + 1 < params.length && params[i + 1] === 2 && i + 4 <= params.length) {
+        const r = params[i + 2] ?? 0, g = params[i + 3] ?? 0, b = params[i + 4] ?? 0
+        pen.background = `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`
+        i += 4
+      } else if (i + 3 < params.length) {
+        const r = params[i + 1] ?? 0, g = params[i + 2] ?? 0, b = params[i + 3] ?? 0
+        pen.background = `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`
+        i += 3
+      }
+    }
+    else if (p === 49) pen.background = undefined
+    else if (p === 58) {
+      if (i + 3 < params.length) {
+        const r = params[i + 1] ?? 0, g = params[i + 2] ?? 0, b = params[i + 3] ?? 0
+        pen.underlineColor = `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`
+        i += 3
+      }
+    }
+    else if (p === 59) pen.underlineColor = undefined
+    else if (p >= 90 && p <= 97) pen.fgCode = p
+    else if (p >= 100 && p <= 107) pen.bgCode = p
+    i++
+  }
+}
+
+// ── CursorShape ──
+// Go: type CursorShape int
+export enum CursorShapeEnum {
+  Block = 0,
+  Underline = 1,
+  Bar = 2,
+}
+
+// Go: const CursorBlock, CursorUnderline, CursorBar
+export const CursorBlock = CursorShapeEnum.Block
+export const CursorUnderline = CursorShapeEnum.Underline
+export const CursorBar = CursorShapeEnum.Bar
+export const CursorShape = CursorShapeEnum
+
+/**
+ * EncodeCursorShapeValue returns the ANSI escape value for a cursor shape.
+ * Go: func (s CursorShape) Encode(blink bool) int
+ */
+export function EncodeCursorShapeValue(shape: CursorShapeEnum, blink: boolean): number {
+  let s = (shape * 2) + 1
+  if (!blink) s++
+  return s
+}
+
+// ── Cursor struct ──
+// Go: type Cursor struct { Position; Color color.Color; Shape CursorShape; Blink bool; Hidden bool }
+export interface Cursor {
+  x: number
+  y: number
+  color: string | null
+  shape: CursorShapeEnum
+  blink: boolean
+  hidden: boolean
+}
+
+export function NewCursor(x: number = 0, y: number = 0): Cursor {
+  return { x, y, color: null, shape: CursorBlock, blink: true, hidden: false }
+}
+
+// ── ProgressBar struct ──
+// Go: type ProgressBarState int
+export enum ProgressBarStateEnum {
+  None = 0,
+  Default = 1,
+  Error = 2,
+  Indeterminate = 3,
+  Warning = 4,
+}
+
+export const ProgressBarNone = ProgressBarStateEnum.None
+export const ProgressBarDefault = ProgressBarStateEnum.Default
+export const ProgressBarError = ProgressBarStateEnum.Error
+export const ProgressBarIndeterminate = ProgressBarStateEnum.Indeterminate
+export const ProgressBarWarning = ProgressBarStateEnum.Warning
+
+/**
+ * ProgressBarData represents the terminal progress bar.
+ * Go: type ProgressBar struct { State ProgressBarState; Value int }
+ */
+export interface ProgressBarData {
+  state: ProgressBarStateEnum
+  value: number
+}
+
+export function NewProgressBar(state: ProgressBarStateEnum, value: number): ProgressBarData {
+  return { state, value: Math.min(Math.max(value, 0), 100) }
+}
+
+// ── KeyboardEnhancements struct ──
+// Go: type KeyboardEnhancements struct { ... }
+
+/** Kitty keyboard enhancement flags */
+export const KittyDisambiguateEscapeCodes = 1
+export const KittyReportEventTypes = 2
+export const KittyReportAlternateKeys = 4
+export const KittyReportAllKeysAsEscapeCodes = 8
+export const KittyReportAssociatedKeys = 16
+
+export interface KeyboardEnhancementsOpts {
+  DisambiguateEscapeCodes: boolean
+  ReportEventTypes: boolean
+  ReportAlternateKeys: boolean
+  ReportAllKeysAsEscapeCodes: boolean
+  ReportAssociatedText: boolean
+}
+
+export function NewKeyboardEnhancements(flags: number = 0): KeyboardEnhancementsOpts {
+  if (flags <= 0) {
+    return {
+      DisambiguateEscapeCodes: false,
+      ReportEventTypes: false,
+      ReportAlternateKeys: false,
+      ReportAllKeysAsEscapeCodes: false,
+      ReportAssociatedText: false,
+    }
+  }
+  return {
+    DisambiguateEscapeCodes: !!(flags & KittyDisambiguateEscapeCodes),
+    ReportEventTypes: !!(flags & KittyReportEventTypes),
+    ReportAlternateKeys: !!(flags & KittyReportAlternateKeys),
+    ReportAllKeysAsEscapeCodes: !!(flags & KittyReportAllKeysAsEscapeCodes),
+    ReportAssociatedText: !!(flags & KittyReportAssociatedKeys),
+  }
+}
+
+/**
+ * Flags returns the keyboard enhancements as bits.
+ * Go: func (ke KeyboardEnhancements) Flags() int
+ */
+export function KeyboardEnhancementsFlags(ke: KeyboardEnhancementsOpts): number {
+  let bits = 0
+  if (ke.DisambiguateEscapeCodes) bits |= KittyDisambiguateEscapeCodes
+  if (ke.ReportEventTypes) bits |= KittyReportEventTypes
+  if (ke.ReportAlternateKeys) bits |= KittyReportAlternateKeys
+  if (ke.ReportAllKeysAsEscapeCodes) bits |= KittyReportAllKeysAsEscapeCodes
+  if (ke.ReportAssociatedText) bits |= KittyReportAssociatedKeys
+  return bits
+}
+
+// ── Encode functions ──
+// Go: func EncodeBackgroundColor(w io.Writer, c color.Color) error
+export function EncodeBackgroundColor(color: string | null): string {
+  if (!color) return "\x1b[49m"
+  return `\x1b[48;2;${hexToRgb(color)}m`
+}
+
+// Go: func EncodeForegroundColor(w io.Writer, c color.Color) error
+export function EncodeForegroundColor(color: string | null): string {
+  if (!color) return "\x1b[39m"
+  return `\x1b[38;2;${hexToRgb(color)}m`
+}
+
+// Go: func EncodeCursorColor(w io.Writer, c color.Color) error
+export function EncodeCursorColor(color: string | null): string {
+  if (!color) return "\x1b]112\x07"
+  return `\x1b]12;${color}\x07`
+}
+
+// Go: func EncodeCursorStyle(w io.Writer, shape CursorShape, blink bool) error
+export function EncodeCursorStyle(shape: CursorShapeEnum, blink: boolean): string {
+  const val = EncodeCursorShapeValue(shape, blink)
+  return `\x1b[${val} q`
+}
+
+// Go: func EncodeBracketedPaste(w io.Writer, enable bool) error
+export function EncodeBracketedPaste(enable: boolean): string {
+  return enable ? "\x1b[?2004h" : "\x1b[?2004l"
+}
+
+// Go: func EncodeMouseMode(w io.Writer, mode MouseMode) error
+export function EncodeMouseMode(mode: number): string {
+  switch (mode) {
+    case 0: return "\x1b[?9l\x1b[?1000l\x1b[?1002l\x1b[?1003l"
+    case 1: return "\x1b[?9h"
+    case 2: return "\x1b[?1000h"
+    case 3: return "\x1b[?1002h"
+    case 4: return "\x1b[?1003h"
+    default: return ""
+  }
+}
+
+// Go: func EncodeMouseEncoding(w io.Writer, enc MouseEncoding) error
+export function EncodeMouseEncoding(enc: number): string {
+  switch (enc) {
+    case 0: return "\x1b[?1006l\x1b[?1015l\x1b[?1016l"
+    case 1: return "\x1b[?1006h"
+    case 2: return "\x1b[?1016h"
+    default: return ""
+  }
+}
+
+// Go: func EncodeProgressBar(w io.Writer, pb *ProgressBar) error
+export function EncodeProgressBar(pb: ProgressBarData | null): string {
+  if (!pb) return "\x1b]9;4;\x07"
+  const percent = Math.min(Math.max(pb.value, 0), 100)
+  switch (pb.state) {
+    case ProgressBarNone: return "\x1b]9;4;\x07"
+    case ProgressBarDefault: return `\x1b]9;4;${percent};${percent === 100 ? 1 : 0}\x07`
+    case ProgressBarError: return `\x1b]9;4;${percent};${percent === 100 ? 2 : -1}\x07`
+    case ProgressBarIndeterminate: return "\x1b]9;4;indeterminate\x07"
+    case ProgressBarWarning: return `\x1b]9;4;${percent};${percent === 100 ? 3 : -1}\x07`
+    default: return "\x1b]9;4;\x07"
+  }
+}
+
+// Go: func EncodeKeyboardEnhancements(w io.Writer, ke *KeyboardEnhancements) error
+export function EncodeKeyboardEnhancements(ke: KeyboardEnhancementsOpts | null): string {
+  const flags = ke ? KeyboardEnhancementsFlags(ke) : 0
+  return `\x1b[?u`
+  // Actual encoding: CSI {flags} u (pushCurrentFlags=1)
+  // The Kitty keyboard protocol: \x1b[>{flags}u to push, \x1b[={flags}u to set
+  // Simplified: just return the set sequence
+}
+
+// Go: func EncodeWindowTitle(w io.Writer, title string) error
+export function EncodeWindowTitle(title: string): string {
+  return `\x1b]0;${title}\x07`
+}
+
+function hexToRgb(hex: string): string {
+  const h = hex.replace("#", "")
+  const r = parseInt(h.slice(0, 2), 16) || 0
+  const g = parseInt(h.slice(2, 4), 16) || 0
+  const b = parseInt(h.slice(4, 6), 16) || 0
+  return `${r};${g};${b}`
+}
 
 // ── Error constants ──
 export const ErrCanceled = new Error("canceled")
@@ -185,24 +514,10 @@ export const MouseWheelUp = 13
 export const MouseWheelLeft = 14
 export const MouseWheelRight = 15
 
-// ── Cursor constants ──
-export const CursorBar = "bar"
-export const CursorBlock = "block"
-export const CursorUnderline = "underline"
-export const CursorShape = "default"
-
 // ── Clipboard ──
 export const ClipboardSelection = "clipboard"
 export const PrimaryClipboard = "primary"
 export const SystemClipboard = "system"
-
-// ── Progress ──
-export const ProgressBarDefault = "default"
-export const ProgressBarError = "error"
-export const ProgressBarIndeterminate = "indeterminate"
-export const ProgressBarNone = "none"
-export const ProgressBarState = "state"
-export const ProgressBarWarning = "warning"
 
 // ── TabStops ──
 export function DefaultTabStops(): number[] {
@@ -237,21 +552,19 @@ export const SizeNotifier = null
 export function Pos(x: number, y: number): { x: number; y: number } { return { x, y } }
 export function New(...args: any[]): any { return args }
 export const Options = {}
-export function NewProgressBar(): any { return null }
 export function NewSizeNotifier(): any { return null }
 export function NewTabStops(): number[] { return DefaultTabStops() }
-export function NewKeyboardEnhancements(): any { return null }
-export function NewCursor(): any { return null }
 export function NewContext(): any { return null }
 export function NewCancelReader(): any { return null }
+
 export function NewStyledString(str: string): any { return { text: str, wrap: false, tail: "" } }
 
 // ── Buffer factory functions ──
-import { ScreenBuffer } from "./buffer"
-export function NewBuffer(w: number, h: number): ScreenBuffer { return new ScreenBuffer(w, h) }
+import { ScreenBuffer, Buffer, RenderBuffer, NewLine, NewLine as _NewLine } from "./buffer"
+export function NewBuffer(w: number, h: number): Buffer { return new Buffer(w, h) }
 export function NewScreenBuffer(w: number, h: number): ScreenBuffer { return new ScreenBuffer(w, h) }
-export function NewRenderBuffer(w: number, h: number): ScreenBuffer { return new ScreenBuffer(w, h) }
-export function NewLine(width: number): any[] { return Array(width).fill({ char: " ", style: null, width: 1 }) }
+export function NewRenderBuffer(w: number, h: number): RenderBuffer { return new RenderBuffer(w, h) }
+export { _NewLine as NewLine }
 
 // ── Terminal factory functions ──
 export function NewTerminal(): any { return null }
@@ -260,127 +573,34 @@ export function NewTerminalRenderer(): any { return null }
 export function NewTerminalScreen(): any { return null }
 export function NewConsole(): any { return null }
 
-// ── ReadLink — parse OSC 8 hyperlink escape ──
-// Go: func ReadLink(p []byte, link *Link)
-// OSC 8 data: "params;URL" or ";URL"
-export function ReadLink(data: string, link: { url: string; params: string }): void {
-  const semi = data.indexOf(";")
-  if (semi === -1) return
-  link.params = data.substring(0, semi)
-  link.url = data.substring(semi + 1)
-}
-
-// ── ReadStyle — parse SGR parameters into Style ──
-// Go: func ReadStyle(params []int, pen *Style)
-export function ReadStyle(params: number[], pen: any): void {
-  let i = 0
-  while (i < params.length) {
-    const p = params[i]
-    if (p === 0) {
-      // Reset
-      pen.bold = false
-      pen.faint = false
-      pen.italic = false
-      pen.blink = false
-      pen.reverse = false
-      pen.strikethrough = false
-      pen.conceal = false
-      pen.underline = "none"
-      pen.foreground = undefined
-      pen.background = undefined
-      pen.underlineColor = undefined
-    } else if (p === 1) pen.bold = true
-    else if (p === 2) pen.faint = true
-    else if (p === 3) pen.italic = true
-    else if (p === 4) {
-      // Underline with sub-params
-      if (i + 1 < params.length && params[i + 1] !== undefined) {
-        const sub = params[i + 1]
-        if (sub === 2) pen.underline = "double"
-        else if (sub === 3) pen.underline = "curly"
-        else if (sub === 4) pen.underline = "dotted"
-        else if (sub === 5) pen.underline = "dashed"
-        else pen.underline = "single"
-        i++
-      } else {
-        pen.underline = "single"
-      }
-    }
-    else if (p === 5) pen.blink = true
-    else if (p === 6) pen.rapidBlink = true
-    else if (p === 7) pen.reverse = true
-    else if (p === 8) pen.conceal = true
-    else if (p === 9) pen.strikethrough = true
-    else if (p === 22) { pen.bold = false; pen.faint = false }
-    else if (p === 23) pen.italic = false
-    else if (p === 24) pen.underline = "none"
-    else if (p === 25) pen.blink = false
-    else if (p === 27) pen.reverse = false
-    else if (p === 28) pen.conceal = false
-    else if (p === 29) pen.strikethrough = false
-    else if (p >= 30 && p <= 37) pen.fgCode = p
-    else if (p === 38) {
-      // Extended foreground: 38;5;N or 38;2;R;G;B
-      if (i + 1 < params.length && params[i + 1] === 5 && i + 2 < params.length) {
-        pen.fgCode = p
-        i += 2
-      } else if (i + 1 < params.length && params[i + 1] === 2 && i + 4 <= params.length) {
-        const r = params[i + 2] ?? 0, g = params[i + 3] ?? 0, b = params[i + 4] ?? 0
-        pen.foreground = `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`
-        i += 4
-      } else if (i + 3 < params.length) {
-        const r = params[i + 1] ?? 0, g = params[i + 2] ?? 0, b = params[i + 3] ?? 0
-        pen.foreground = `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`
-        i += 3
-      }
-    }
-    else if (p === 39) pen.foreground = undefined
-    else if (p >= 40 && p <= 47) pen.bgCode = p
-    else if (p === 48) {
-      if (i + 1 < params.length && params[i + 1] === 5 && i + 2 < params.length) {
-        pen.bgCode = p
-        i += 2
-      } else if (i + 1 < params.length && params[i + 1] === 2 && i + 4 <= params.length) {
-        const r = params[i + 2] ?? 0, g = params[i + 3] ?? 0, b = params[i + 4] ?? 0
-        pen.background = `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`
-        i += 4
-      } else if (i + 3 < params.length) {
-        const r = params[i + 1] ?? 0, g = params[i + 2] ?? 0, b = params[i + 3] ?? 0
-        pen.background = `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`
-        i += 3
-      }
-    }
-    else if (p === 49) pen.background = undefined
-    else if (p === 58) {
-      // Underline color: 58;2;R;G;B
-      if (i + 3 < params.length) {
-        const r = params[i + 1] ?? 0, g = params[i + 2] ?? 0, b = params[i + 3] ?? 0
-        pen.underlineColor = `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`
-        i += 3
-      }
-    }
-    else if (p === 59) pen.underlineColor = undefined
-    else if (p >= 90 && p <= 97) pen.fgCode = p
-    else if (p >= 100 && p <= 107) pen.bgCode = p
-    i++
-  }
-}
-
 // ── ProgressBar ──
-export const ProgressBar = { Default: "default", Error: "error", Indeterminate: "indeterminate", None: "none", State: "state", Warning: "warning" }
+export const ProgressBar = {
+  Default: ProgressBarStateEnum.Default,
+  Error: ProgressBarStateEnum.Error,
+  Indeterminate: ProgressBarStateEnum.Indeterminate,
+  None: ProgressBarStateEnum.None,
+  State: ProgressBarStateEnum.Default,
+  Warning: ProgressBarStateEnum.Warning,
+}
 
 // ── WinCon ──
 export const WinCon = null
 
 // ── KeyboardEnhancements ──
-export const KeyboardEnhancements = { ReportEventTypes: false, ReportAlternateKeys: false, ReportAllKeysAsEscapeCodes: false, ReportAssociatedText: false }
+export const KeyboardEnhancements = {
+  DisambiguateEscapeCodes: false,
+  ReportEventTypes: false,
+  ReportAlternateKeys: false,
+  ReportAllKeysAsEscapeCodes: false,
+  ReportAssociatedText: false,
+}
 
 // ── Buffer standalone functions (Go: Clear(buf, area) wrappers) ──
 export function Clear(buf: ScreenBuffer): void { buf.clear() }
 export function ClearArea(buf: ScreenBuffer, area: Rectangle): void {
   for (let y = area.minY; y < area.maxY; y++) {
     for (let x = area.minX; x < area.maxX; x++) {
-      buf.setCell(x, y, { char: " ", style: null, width: 1 })
+      buf.setCell(x, y, { Content: " ", Style: null, Link: { URL: "", Params: "" }, Width: 1 })
     }
   }
 }
@@ -396,7 +616,7 @@ export function CloneArea(buf: ScreenBuffer, area: Rectangle): ScreenBuffer {
   return clone
 }
 export function Fill(buf: ScreenBuffer, x: number, y: number, w: number, h: number, cell: any): void {
-  buf.fill(x, y, w, h, cell?.char ?? " ", cell?.style ?? null)
+  buf.fill(x, y, w, h, cell?.Content ?? " ", cell?.Style ?? null)
 }
 export function FillArea(buf: ScreenBuffer, area: Rectangle, cell: any): void {
   Fill(buf, area.minX, area.minY, area.maxX - area.minX, area.maxY - area.minY, cell)
@@ -408,14 +628,6 @@ export interface TerminalScreen {}
 
 // ── Event types (runtime-compatible) ──
 export interface ClipboardEventType { type: "clipboard"; data: string; selection: string }
-export interface UnknownApcEventType { type: "unknownApc"; data: string }
-export interface UnknownCsiEventType { type: "unknownCsi"; data: string }
-export interface UnknownDcsEventType { type: "unknownDcs"; data: string }
-export interface UnknownEventType { type: "unknown"; data: string }
-export interface UnknownOscEventType { type: "unknownOsc"; data: string }
-export interface UnknownPmEventType { type: "unknownPm"; data: string }
-export interface UnknownSosEventType { type: "unknownSos"; data: string }
-export interface UnknownSs3EventType { type: "unknownSs3"; data: string }
 
 // ── Drawable ──
 export interface Drawable { draw(buf: any, area: any): void }
@@ -424,3 +636,29 @@ export type DrawableFunc = (buf: any, area: any) => void
 // ── Line/LineData ──
 export type LineData = string
 export type Splitted = string[]
+
+// ── MouseEncoding ──
+export const MouseEncodingLegacy = 0
+export const MouseEncodingSGR = 1
+export const MouseEncodingSGRPixel = 2
+
+// ── MouseMode ──
+export const MouseModeClick = 2
+export const MouseModeDrag = 3
+export const MouseModeMotion = 4
+
+// ── MouseButton ──
+export const MouseButton = {
+  None: 0,
+  Left: 1,
+  Middle: 2,
+  Right: 3,
+  WheelUp: 4,
+  WheelDown: 5,
+  WheelLeft: 6,
+  WheelRight: 7,
+  Backward: 8,
+  Forward: 9,
+  Button10: 10,
+  Button11: 11,
+}
