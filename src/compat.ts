@@ -155,6 +155,80 @@ export function Environ(): Record<string, string> {
 // Color profiles: truecolor, ANSI256, ANSI, ascii, noTTY
 export type ColorProfile = "truecolor" | "ANSI256" | "ANSI" | "ascii" | "noTTY"
 
+// ANSI 256-color cube values: [0, 95, 135, 175, 215, 255]
+const CUBE_VALUES = [0, 95, 135, 175, 215, 255]
+
+// Basic 16-color palette as RGB tuples
+const BASIC_16_COLORS: [number, number, number][] = [
+  [0, 0, 0],       // 0 black
+  [128, 0, 0],     // 1 red
+  [0, 128, 0],     // 2 green
+  [128, 128, 0],   // 3 yellow
+  [0, 0, 128],     // 4 blue
+  [128, 0, 128],   // 5 magenta
+  [0, 128, 128],   // 6 cyan
+  [192, 192, 192], // 7 white
+  [128, 128, 128], // 8 bright black
+  [255, 0, 0],     // 9 bright red
+  [0, 255, 0],     // 10 bright green
+  [255, 255, 0],   // 11 bright yellow
+  [0, 0, 255],     // 12 bright blue
+  [255, 0, 255],   // 13 bright magenta
+  [0, 255, 255],   // 14 bright cyan
+  [255, 255, 255], // 15 bright white
+]
+
+function parseHexColor(hex: string): [number, number, number] {
+  const h = hex.replace("#", "")
+  return [
+    parseInt(h.slice(0, 2), 16),
+    parseInt(h.slice(2, 4), 16),
+    parseInt(h.slice(4, 6), 16),
+  ]
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`
+}
+
+function colorDistance(r1: number, g1: number, b1: number, r2: number, g2: number, b2: number): number {
+  return (r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2
+}
+
+function nearestAnsi256(r: number, g: number, b: number): string {
+  // Check the 6x6x6 color cube (indices 16-231)
+  const ri = Math.round(r / 51)
+  const gi = Math.round(g / 51)
+  const bi = Math.round(b / 51)
+  const cubeR = CUBE_VALUES[ri]!
+  const cubeG = CUBE_VALUES[gi]!
+  const cubeB = CUBE_VALUES[bi]!
+  return rgbToHex(cubeR, cubeG, cubeB)
+}
+
+function nearestAnsi16(r: number, g: number, b: number): string {
+  let bestIdx = 0
+  let bestDist = Infinity
+  for (let i = 0; i < BASIC_16_COLORS.length; i++) {
+    const [cr, cg, cb] = BASIC_16_COLORS[i]!
+    const dist = colorDistance(r, g, b, cr, cg, cb)
+    if (dist < bestDist) {
+      bestDist = dist
+      bestIdx = i
+    }
+  }
+  const [cr, cg, cb] = BASIC_16_COLORS[bestIdx]!
+  return rgbToHex(cr, cg, cb)
+}
+
+function convertColor(hex: string | undefined, profile: ColorProfile): string | undefined {
+  if (!hex) return undefined
+  const [r, g, b] = parseHexColor(hex)
+  if (profile === "ANSI256") return nearestAnsi256(r, g, b)
+  if (profile === "ANSI") return nearestAnsi16(r, g, b)
+  return hex
+}
+
 export function ConvertStyle(style: CellStyle, profile: ColorProfile): CellStyle {
   if (profile === "truecolor") return { ...style }
   if (profile === "noTTY") return {}
@@ -169,7 +243,12 @@ export function ConvertStyle(style: CellStyle, profile: ColorProfile): CellStyle
     }
   }
   // ANSI256 or ANSI: downgrade truecolor to nearest 256 or basic color
-  return { ...style }
+  return {
+    ...style,
+    foreground: convertColor(style.foreground, profile),
+    background: convertColor(style.background, profile),
+    underlineColor: convertColor(style.underlineColor, profile),
+  }
 }
 
 export function ConvertLink(link: { url: string; params: string }, profile: ColorProfile): { url: string; params: string } {
