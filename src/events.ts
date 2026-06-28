@@ -280,6 +280,41 @@ export function capabilityString(e: CapabilityEvent): string {
   return e.content
 }
 
+/**
+ * ClipboardSelection represents a clipboard selection type.
+ * Go: type ClipboardSelection = byte
+ * SystemClipboard = 'c', PrimaryClipboard = 'p'
+ */
+export type ClipboardSelection = "system" | "primary"
+
+export const SystemClipboard: ClipboardSelection = "system"
+export const PrimaryClipboard: ClipboardSelection = "primary"
+
+/**
+ * ClipboardEvent is a clipboard read message event.
+ * Emitted when a terminal receives an OSC 52 clipboard read event.
+ * Go: type ClipboardEvent struct { Content string; Selection ClipboardSelection }
+ */
+export interface ClipboardEvent {
+  type: "clipboard"
+  content: string
+  selection: ClipboardSelection
+}
+
+/**
+ * String returns the clipboard content.
+ */
+export function clipboardEventString(e: ClipboardEvent): string {
+  return e.content
+}
+
+/**
+ * Clipboard returns the clipboard selection (system or primary).
+ */
+export function clipboardEventSelection(e: ClipboardEvent): ClipboardSelection {
+  return e.selection
+}
+
 export type TerminalEvent =
   | KeyEvent
   | MouseClickEvent
@@ -310,6 +345,7 @@ export type TerminalEvent =
   | CursorColorEvent
   | WindowOpEvent
   | CapabilityEvent
+  | ClipboardEvent
   | UnknownEvent
   | UnknownCsiEvent
   | UnknownOscEvent
