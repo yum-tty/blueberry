@@ -315,6 +315,15 @@ export function clipboardEventSelection(e: ClipboardEvent): ClipboardSelection {
   return e.selection
 }
 
+/**
+ * EventStreamer is an interface that defines a method to stream events from an
+ * input source. The streamer should block until an error occurs.
+ * Go: type EventStreamer interface { StreamEvents(ctx context.Context, ch chan<- Event) error }
+ */
+export interface EventStreamer {
+  next(): TerminalEvent | null
+}
+
 export type TerminalEvent =
   | KeyEvent
   | MouseClickEvent
