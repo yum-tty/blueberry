@@ -40,6 +40,7 @@ export {
   type Lines,
   type LineData,
   type Rectangle,
+  type Screen,
   Buffer,
   RenderBuffer,
   ScreenBuffer,
@@ -54,6 +55,11 @@ export {
   LinesRender,
   Rect,
   TrimSpace,
+  rectEmpty,
+  rectIn,
+  rectOverlaps,
+  rectDx,
+  rectDy,
 } from "./buffer"
 
 export {
@@ -93,6 +99,8 @@ export {
   type CapabilityEvent,
   type ClipboardEvent,
   type ClipboardSelection,
+  type Size as EventSize,
+  type EventStreamer,
   SystemClipboard,
   PrimaryClipboard,
   clipboardEventString,
@@ -310,6 +318,44 @@ export {
   TerminalScreen,
 } from "./screen/terminal_screen"
 
+export { Context } from "./screen/context"
+
+export { Window as WindowScreen } from "./window"
+
+export { TabStops as TabStopsImpl, DefaultTabStops as DefaultTabStopsImpl, DefaultTabInterval } from "./tabstops"
+
+export {
+  type Constraint,
+  Len,
+  Min,
+  Max,
+  Fill as LayoutFill,
+  Ratio,
+  Percent,
+  resolveConstraint,
+} from "./layout/constraint"
+
+export {
+  Flex,
+  FlexStart,
+  FlexLegacy,
+  FlexEnd,
+  FlexCenter,
+  FlexSpaceBetween,
+  FlexSpaceEvenly,
+  FlexSpaceAround,
+  Direction as LayoutDirection,
+  DirectionVertical,
+  DirectionHorizontal,
+  type Padding,
+  Pad,
+  type Splitted as LayoutSplitted,
+  Layout,
+  New as NewLayout,
+  Vertical as VerticalLayout,
+  Horizontal as HorizontalLayout,
+} from "./layout/layout"
+
 // ── Ultraviolet-compatible re-exports ──
 export {
   AttrBold, AttrFaint, AttrItalic, AttrBlink, AttrRapidBlink,
@@ -329,12 +375,13 @@ export {
   EncodeBackgroundColor, EncodeBracketedPaste, EncodeCursorColor,
   EncodeCursorStyle, EncodeForegroundColor, EncodeKeyboardEnhancements,
   EncodeMouseEncoding, EncodeMouseMode, EncodeProgressBar, EncodeWindowTitle,
-  ErrCanceled, ErrInvalidDimensions, ErrReaderNotStarted,
+  ErrCanceled, ErrInvalidDimensions, ErrReaderNotStarted, ErrNotTerminal, ErrPlatformNotSupported,
   MouseNone, MouseLeft, MouseMiddle, MouseRight, MouseBackward, MouseForward,
   MouseModeNone, MouseModePress, MouseButton10, MouseButton11,
   MouseWheelDown, MouseWheelUp, MouseWheelLeft, MouseWheelRight,
   CursorShapeEnum, CursorBlock, CursorUnderline, CursorBar,
   EncodeCursorShapeValue,
+  CursorShape,
   type Cursor,
   NewCursor,
   ProgressBarStateEnum,
