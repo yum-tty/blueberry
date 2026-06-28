@@ -1,7 +1,7 @@
 // buffer.ts | screen buffer (ultraviolet port)
 
 import { type Cell, EmptyCell, emptyCell, isZero, cellEquals, cellClone, cellString } from "./cell"
-import { type Style, styleDiff, isStyleEmpty, stylesEqual } from "./styled"
+import { type Style, styleDiff, isStyleEmpty, stylesEqual, getStringWidth } from "./styled"
 
 const RESET_STYLE = "\x1b[0m"
 const RESET_HYPERLINK = "\x1b]8;;\x07"
@@ -768,13 +768,15 @@ export class ScreenBuffer {
       let currentX = x
       for (let j = 0; j < line.length; j++) {
         if (currentX >= this.width) break
+        const ch = line[j]!
+        const chWidth = getStringWidth(ch) || 1
         this.setCell(currentX, y + i, {
-          Content: line[j]!,
+          Content: ch,
           Style: style,
           Link: { URL: "", Params: "" },
-          Width: 1,
+          Width: chWidth,
         })
-        currentX++
+        currentX += chWidth
       }
     }
   }

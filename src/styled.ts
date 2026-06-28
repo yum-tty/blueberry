@@ -696,7 +696,7 @@ export function stripAnsi(str: string): string {
 
 export function getStringWidth(str: string): number {
   let w = 0
-  for (const ch of str) {
+  for (const ch of stripAnsi(str)) {
     const code = ch.codePointAt(0)!
     if (
       (code >= 0x4E00 && code <= 0x9FFF) ||

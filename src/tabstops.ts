@@ -62,11 +62,13 @@ export class TabStops {
   }
 
   set(col: number): void {
+    if (col < 0 || col >= this.width) return
     const mask = this.mask(col)
     this.stops[col >> 3]! |= mask
   }
 
   reset(col: number): void {
+    if (col < 0 || col >= this.width) return
     const mask = this.mask(col)
     this.stops[col >> 3]! &= ~mask
   }
