@@ -461,6 +461,28 @@ export class Buffer {
       this.SetCell(i, y, c)
     }
   }
+
+  Draw(scr: Screen, area: Rectangle): void {
+    if (rectEmpty(area)) return
+    const bounds = scr.Bounds()
+    if (!rectOverlaps(area, bounds)) return
+    for (let y = area.MinY; y < area.MaxY; y++) {
+      for (let x = area.MinX; x < area.MaxX;) {
+        const c = this.CellAt(x - area.MinX, y - area.MinY)
+        if (!c || isZero(c)) { x++; continue }
+        scr.setCell(x, y, c)
+        const width = c.Width > 0 ? c.Width : 1
+        x += width
+      }
+    }
+  }
+}
+
+// ── Screen interface ──
+
+export interface Screen {
+  setCell(x: number, y: number, c: Cell | null): void
+  Bounds(): Rectangle
 }
 
 // ── RenderBuffer ──

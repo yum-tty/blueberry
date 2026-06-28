@@ -57,6 +57,10 @@ import {
   KeyF18,
   KeyF19,
   KeyF20,
+  KeyF21,
+  KeyF22,
+  KeyF23,
+  KeyF24,
   KeyBackspace,
   KeyTab,
   KeyEnter,
@@ -195,6 +199,17 @@ function buildKeyTable(): Map<string, Key> {
   table.set("\x1b[32~", makeKey(KeyF18))
   table.set("\x1b[33~", makeKey(KeyF19))
   table.set("\x1b[34~", makeKey(KeyF20))
+  table.set("\x1b[35~", makeKey(KeyF21))
+  table.set("\x1b[36~", makeKey(KeyF22))
+  table.set("\x1b[40~", makeKey(KeyF23))
+  table.set("\x1b[41~", makeKey(KeyF24))
+
+  // Linux console double-bracket function keys (F1-F5)
+  table.set("\x1b[[A", makeKey(KeyF1))
+  table.set("\x1b[[B", makeKey(KeyF2))
+  table.set("\x1b[[C", makeKey(KeyF3))
+  table.set("\x1b[[D", makeKey(KeyF4))
+  table.set("\x1b[[E", makeKey(KeyF5))
 
   // URxvt shift arrows
   table.set("\x1b[a", makeKey(KeyUp, ModShift))
@@ -238,6 +253,10 @@ function buildKeyTable(): Map<string, Key> {
     "32": makeKey(KeyF18),
     "33": makeKey(KeyF19),
     "34": makeKey(KeyF20),
+    "35": makeKey(KeyF21),
+    "36": makeKey(KeyF22),
+    "40": makeKey(KeyF23),
+    "41": makeKey(KeyF24),
   }
 
   for (const [k, v] of Object.entries(csiTildeKeys)) {
