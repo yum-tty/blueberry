@@ -853,9 +853,13 @@ export class ScreenBuffer {
 
   fillArea(x: number, y: number, width: number, height: number, cell?: Cell): void {
     const fillCell = cell ?? cellClone(EmptyCell)
+    const cellWidth = Math.max(fillCell.Width ?? 1, 1)
     for (let row = y; row < y + height && row < this.height; row++) {
       for (let col = x; col < x + width && col < this.width; col++) {
-        if (col >= 0 && row >= 0) this.setCell(col, row, cellClone(fillCell))
+        if (col >= 0 && row >= 0) {
+          this.setCell(col, row, cellClone(fillCell))
+          col += cellWidth - 1
+        }
       }
     }
   }

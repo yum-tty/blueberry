@@ -32,8 +32,8 @@ export class Window {
 
   moveBy(dx: number, dy: number): void {
     this.bounds = Rect(
-      this.bounds.minX + dx,
-      this.bounds.minY + dy,
+      this.bounds.MinX + dx,
+      this.bounds.MinY + dy,
       RectangleDx(this.bounds),
       RectangleDy(this.bounds),
     )
@@ -45,7 +45,7 @@ export class Window {
 
   cloneArea(area: Rectangle): Window {
     const clone = new Window(0, 0, this.method)
-    clone.buffer = this.buffer.cloneArea(area.minX, area.minY, RectangleDx(area), RectangleDy(area))
+    clone.buffer = this.buffer.cloneArea(area.MinX, area.MinY, RectangleDx(area), RectangleDy(area))
     clone.parent = this.parent
     clone.method = this.method
     clone.bounds = area
@@ -56,7 +56,7 @@ export class Window {
     if (!this.parent || this.buffer !== this.parent.buffer) {
       this.buffer.resize(width, height)
     }
-    this.bounds = Rect(this.bounds.minX, this.bounds.minY, width, height)
+    this.bounds = Rect(this.bounds.MinX, this.bounds.MinY, width, height)
   }
 
   getWidthMethod(): WidthMethod {

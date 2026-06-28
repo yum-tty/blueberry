@@ -93,14 +93,14 @@ export const ASCIIBorder: Border = {
 
 // ── Rectangle / Rect ──
 export interface Rectangle {
-  minX: number; minY: number; maxX: number; maxY: number
+  MinX: number; MinY: number; MaxX: number; MaxY: number
 }
 export function Rect(x: number, y: number, w: number, h: number): Rectangle {
-  return { minX: x, minY: y, maxX: x + w, maxY: y + h }
+  return { MinX: x, MinY: y, MaxX: x + w, MaxY: y + h }
 }
 
-export function RectangleDx(r: Rectangle): number { return r.maxX - r.minX }
-export function RectangleDy(r: Rectangle): number { return r.maxY - r.minY }
+export function RectangleDx(r: Rectangle): number { return r.MaxX - r.MinX }
+export function RectangleDy(r: Rectangle): number { return r.MaxY - r.MinY }
 
 // ── Size ──
 export interface Size { width: number; height: number }
@@ -576,6 +576,8 @@ function hexToRgb(hex: string): string {
 export const ErrCanceled = new Error("canceled")
 export const ErrInvalidDimensions = new Error("invalid dimensions")
 export const ErrReaderNotStarted = new Error("reader not started")
+export const ErrNotTerminal = new Error("not a terminal")
+export const ErrPlatformNotSupported = new Error("platform not supported")
 
 // ── Mouse constants ──
 export const MouseNone = 0
@@ -677,19 +679,19 @@ export const KeyboardEnhancements = {
 // ── Buffer standalone functions (Go: Clear(buf, area) wrappers) ──
 export function Clear(buf: ScreenBuffer): void { buf.clear() }
 export function ClearArea(buf: ScreenBuffer, area: Rectangle): void {
-  for (let y = area.minY; y < area.maxY; y++) {
-    for (let x = area.minX; x < area.maxX; x++) {
+  for (let y = area.MinY; y < area.MaxY; y++) {
+    for (let x = area.MinX; x < area.MaxX; x++) {
       buf.setCell(x, y, { Content: " ", Style: null, Link: { URL: "", Params: "" }, Width: 1 })
     }
   }
 }
 export function Clone(buf: ScreenBuffer): ScreenBuffer { return buf.clone() }
 export function CloneArea(buf: ScreenBuffer, area: Rectangle): ScreenBuffer {
-  const clone = new ScreenBuffer(area.maxX - area.minX, area.maxY - area.minY)
-  for (let y = area.minY; y < area.maxY; y++) {
-    for (let x = area.minX; x < area.maxX; x++) {
+  const clone = new ScreenBuffer(area.MaxX - area.MinX, area.MaxY - area.MinY)
+  for (let y = area.MinY; y < area.MaxY; y++) {
+    for (let x = area.MinX; x < area.MaxX; x++) {
       const cell = buf.getCell(x, y)
-      if (cell) clone.setCell(x - area.minX, y - area.minY, { ...cell })
+      if (cell) clone.setCell(x - area.MinX, y - area.MinY, { ...cell })
     }
   }
   return clone
@@ -698,7 +700,7 @@ export function Fill(buf: ScreenBuffer, x: number, y: number, w: number, h: numb
   buf.fill(x, y, w, h, cell?.Content ?? " ", cell?.Style ?? null)
 }
 export function FillArea(buf: ScreenBuffer, area: Rectangle, cell: any): void {
-  Fill(buf, area.minX, area.minY, area.maxX - area.minX, area.maxY - area.minY, cell)
+  Fill(buf, area.MinX, area.MinY, area.MaxX - area.MinX, area.MaxY - area.MinY, cell)
 }
 
 // ── Terminal types ──

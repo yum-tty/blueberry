@@ -170,8 +170,8 @@ export interface Size {
  * Bounds returns the bounds corresponding to the size.
  * Go: Size.Bounds() Rectangle
  */
-export function sizeBounds(s: Size): { minX: number; minY: number; maxX: number; maxY: number } {
-  return { minX: 0, minY: 0, maxX: s.width, maxY: s.height }
+export function sizeBounds(s: Size): { MinX: number; MinY: number; MaxX: number; MaxY: number } {
+  return { MinX: 0, MinY: 0, MaxX: s.width, MaxY: s.height }
 }
 
 /**

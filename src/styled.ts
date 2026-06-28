@@ -456,7 +456,7 @@ const BRIGHT_BG_BRIGHTCOLORS = [
   "#5555FF", "#FF55FF", "#55FFFF", "#FFFFFF",
 ]
 
-function basicFgColor(idx: number): string { return BRIGHT_BGCOLORS[idx] ?? "#000000" }
+function basicFgColor(idx: number): string { return BRIGHT_COLORS[idx] ?? "#000000" }
 function basicBgColor(idx: number): string { return BRIGHT_BGCOLORS[idx] ?? "#000000" }
 function brightFgColor(idx: number): string { return BRIGHT_FGCOLORS[idx] ?? "#555555" }
 function brightBgColor(idx: number): string { return BRIGHT_BG_BRIGHTCOLORS[idx] ?? "#AA0000" }

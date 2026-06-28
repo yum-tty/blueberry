@@ -107,8 +107,8 @@ export class Layout {
       ? RectangleDy(innerArea)
       : RectangleDx(innerArea)
     const crossStart = this.direction === Direction.Horizontal
-      ? innerArea.minY
-      : innerArea.minX
+      ? innerArea.MinY
+      : innerArea.MinX
 
     const segmentCount = this.constraints.length
     if (segmentCount === 0) {
@@ -213,8 +213,8 @@ export class Layout {
     }
 
     return Rect(
-      area.minX + this.padding.left,
-      area.minY + this.padding.top,
+      area.MinX + this.padding.left,
+      area.MinY + this.padding.top,
       Math.max(0, RectangleDx(area) - horizontal),
       Math.max(0, RectangleDy(area) - vertical),
     )
