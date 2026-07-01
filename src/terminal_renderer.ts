@@ -138,15 +138,68 @@ export class TerminalRenderer {
   }
 
   /**
-   * Compare buffers and render changes. Uses incremental style diffing
-   * matching Go's StyleDiff for minimal ANSI transitions.
+   * Detect scroll by checking if currBuffer lines 1..N match prevBuffer lines 0..N-1.
+   * Returns the number of lines scrolled up (0 if no scroll detected).
+   */
+  private detectScroll(): number {
+    // Check from top: find first line where curr[y] differs from prev[y-1]
+    for (let offset = 1; offset < this.height; offset++) {
+      let match = true
+      for (let y = offset; y < this.height; y++) {
+        if (this.newLineHashes[y] !== this.oldLineHashes[y - offset]) {
+          match = false
+          break
+        }
+      }
+      if (match) return offset
+    }
+    return 0
+  }
+
+  /**
+   * Compare buffers and render changes. Uses scroll detection for fast
+   * partial updates and incremental style diffing for cell-level changes.
    */
   private diffAndRender(): void {
     let buffer = ""
     let changes = 0
 
-    for (let y = 0; y < this.height; y++) {
-      if (y < this.oldLineHashes.length && this.oldLineHashes[y] === this.newLineHashes[y] && this.newLineHashes[y] !== 0) {
+    const scroll = this.detectScroll()
+    const startLine = scroll > 0 ? 0 : 0
+
+    if (scroll > 0) {
+      // Emit scroll: move to bottom line and write newlines
+      buffer += `${CSI}${this.height};1H`
+      for (let i = 0; i < scroll; i++) {
+        buffer += "\n"
+      }
+      changes += scroll
+
+      // Shift prevBuffer to match the scrolled state for diffing
+      for (let y = 0; y < this.height - scroll; y++) {
+        for (let x = 0; x < this.width; x++) {
+          const src = this.prevBuffer.getCell(x, y + scroll)
+          if (src) {
+            this.prevBuffer.setCell(x, y, src)
+          }
+        }
+      }
+      // Clear the bottom lines that were scrolled in
+      for (let y = this.height - scroll; y < this.height; y++) {
+        for (let x = 0; x < this.width; x++) {
+          this.prevBuffer.setCell(x, y, {
+            Content: " ",
+            Style: null,
+            Link: { URL: "", Params: "" },
+            Width: 1,
+          })
+        }
+      }
+    }
+
+    for (let y = startLine; y < this.height; y++) {
+      if (y < this.oldLineHashes.length && y + scroll < this.oldLineHashes.length &&
+          this.oldLineHashes[y + scroll] === this.newLineHashes[y] && this.newLineHashes[y] !== 0) {
         continue
       }
 
@@ -175,11 +228,6 @@ export class TerminalRenderer {
           }
           changes++
         }
-      }
-
-      // Reset pen at end of line if needed
-      if (!isStyleEmpty(pen)) {
-        // pen will be reset on next line's first cell or at end
       }
     }
 

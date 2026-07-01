@@ -359,8 +359,8 @@ export class EventDecoder {
       }
     }
 
-    // X10 mouse: CSI M (3 bytes follow)
-    if (finalChar === "M") {
+    // X10 mouse: CSI M (3 bytes follow) — but NOT SGR mouse (CSI < ... M)
+    if (finalChar === "M" && !params.startsWith("<")) {
       if (i + 3 <= buf.length) {
         const b = buf.charCodeAt(i) - 32
         const cx = buf.charCodeAt(i + 1) - 32
@@ -386,9 +386,11 @@ export class EventDecoder {
       }
     }
 
-    // SGR mouse: CSI < or CSI P
+    // SGR mouse: CSI < btn ; col ; row M/m
     if ((finalChar === "m" || finalChar === "M") && numParams === 3 && params.startsWith("<")) {
-      return this.parseSGRMouse(parsedParams, finalChar === "m", i)
+      // Strip the '<' prefix and re-parse the button code
+      const btnCode = parseInt(params.slice(1), 10) || 0
+      return this.parseSGRMouse([btnCode, parsedParams[1] ?? 0, parsedParams[2] ?? 0], finalChar === "m", i)
     }
 
     // Focus/Blur
@@ -646,7 +648,7 @@ export class EventDecoder {
 
   /**
    * Parse OSC sequence (ESC ] ...).
-   * Returns null for now as OSC sequences are primarily for configuration responses.
+   * Handles OSC 8 (hyperlinks), OSC 10/11/12 (color), OSC 52 (clipboard).
    */
   private parseOsc(buf: string): DecodeResult {
     if (buf.length < 2) {
@@ -670,10 +672,13 @@ export class EventDecoder {
     }
 
     // Skip semicolon
-    if (i < buf.length && buf.charCodeAt(i) === 0x3B) i++
+    let dataStart = -1
+    if (i < buf.length && buf.charCodeAt(i) === 0x3B) {
+      i++
+      dataStart = i
+    }
 
     // Scan to terminator (BEL, ESC, ST, CAN, SUB)
-    let dataStart = i
     while (i < buf.length) {
       const c = buf.charCodeAt(i)
       if (c === 0x07 || c === 0x1B || c === 0x9C || c === 0x18 || c === 0x1A) break
@@ -685,13 +690,46 @@ export class EventDecoder {
     }
 
     const dataEnd = i
+    const terminator = buf.charCodeAt(i)
     i++
 
     // Check for ESC \ (ST terminator)
-    if (buf.charCodeAt(dataEnd) === 0x1B) {
+    if (terminator === 0x1B) {
       if (i < buf.length && buf.charCodeAt(i) === 0x5C) {
         i++
       }
+    }
+
+    // CAN/SUB cancel the sequence
+    if (terminator === 0x18 || terminator === 0x1A) {
+      return { n: i, event: null }
+    }
+
+    if (dataStart < 0 || dataEnd <= dataStart) {
+      return { n: i, event: null }
+    }
+
+    const data = buf.slice(dataStart, dataEnd)
+
+    switch (cmd) {
+      case 8: {
+        // OSC 8: Hyperlink — params;url
+        const semiIdx = data.indexOf(";")
+        if (semiIdx >= 0) {
+          const params = data.slice(0, semiIdx)
+          const url = data.slice(semiIdx + 1)
+          if (url.length > 0) {
+            return { n: i, event: { type: "hyperlink", params, url } }
+          }
+        }
+        return { n: i, event: { type: "hyperlink", params: "", url: "" } }
+      }
+      case 10:
+        return { n: i, event: { type: "foregroundColor", color: data } }
+      case 11:
+        return { n: i, event: { type: "backgroundColor", color: data } }
+      case 12:
+        return { n: i, event: { type: "cursorColor", color: data } }
     }
 
     return { n: i, event: null }

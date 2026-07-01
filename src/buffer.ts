@@ -668,9 +668,13 @@ export class ScreenBuffer {
   getWidth(): number { return this.width }
   getHeight(): number { return this.height }
 
-  getCell(x: number, y: number): Cell | null {
+  CellAt(x: number, y: number): Cell | null {
     if (y < 0 || y >= this.height || x < 0 || x >= this.width) return null
     return this.cells[y]![x]!
+  }
+
+  getCell(x: number, y: number): Cell | null {
+    return this.CellAt(x, y)
   }
 
   setCell(x: number, y: number, cell: Cell): void {

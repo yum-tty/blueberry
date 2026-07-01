@@ -81,6 +81,12 @@ export interface PasteEndEvent {
   type: "pasteEnd"
 }
 
+export interface HyperlinkEvent {
+  type: "hyperlink"
+  params: string
+  url: string
+}
+
 export interface TerminalVersionEvent {
   type: "terminalVersion"
   name: string
@@ -341,6 +347,7 @@ export type TerminalEvent =
   | PasteEvent
   | PasteStartEvent
   | PasteEndEvent
+  | HyperlinkEvent
   | TerminalVersionEvent
   | ModifyOtherKeysEvent
   | KeyboardEnhancementsEvent
