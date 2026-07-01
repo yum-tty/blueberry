@@ -75,16 +75,16 @@ export const BlockBorder: Border = {
   topLeft: "█", topRight: "█", bottomLeft: "█", bottomRight: "█",
 }
 export const InnerHalfBlockBorder: Border = {
-  top: "▄", bottom: "▀", left: "▌", right: "▐",
-  topLeft: "▐", topRight: "▌", bottomLeft: "▐", bottomRight: "▌",
+  top: "▄", bottom: "▀", left: "▐", right: "▌",
+  topLeft: "▗", topRight: "▖", bottomLeft: "▝", bottomRight: "▘",
 }
 export const OuterHalfBlockBorder: Border = {
   top: "▀", bottom: "▄", left: "▌", right: "▐",
-  topLeft: "▌", topRight: "▐", bottomLeft: "▌", bottomRight: "▐",
+  topLeft: "▛", topRight: "▜", bottomLeft: "▙", bottomRight: "▟",
 }
 export const MarkdownBorder: Border = {
-  top: " ", bottom: " ", left: ">", right: " ",
-  topLeft: "", topRight: "", bottomLeft: "", bottomRight: "",
+  top: " ", bottom: " ", left: "|", right: "|",
+  topLeft: "|", topRight: "|", bottomLeft: "|", bottomRight: "|",
 }
 export const ASCIIBorder: Border = {
   top: "-", bottom: "-", left: "|", right: "|",

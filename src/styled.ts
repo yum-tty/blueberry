@@ -492,7 +492,14 @@ function ansi256ToHex(idx: number): string {
  * Go: ReadStyle(params ansi.Params, pen *Style)
  */
 export function ReadStyle(params: number[], pen: Style): void {
-  readStyleParams(params, 0, pen, () => {})
+  if (params.length === 0) {
+    Object.keys(pen).forEach(k => delete (pen as any)[k])
+    return
+  }
+  readStyleParams(params, 0, pen, (s: Style) => {
+    Object.keys(pen).forEach(k => delete (pen as any)[k])
+    Object.assign(pen, s)
+  })
 }
 
 /**
