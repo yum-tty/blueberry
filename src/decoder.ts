@@ -313,9 +313,22 @@ export class EventDecoder {
     i++
 
     const finalChar = String.fromCharCode(finalByte)
-    const paramParts = params.length > 0 ? params.split(/;|:/) : []
-    const parsedParams = paramParts.map(p => p.length > 0 ? parseInt(p, 10) : -1)
+    const paramParts = params.length > 0 ? params.split(";") : []
+    const parsedParams = paramParts.map(p => {
+      // Handle colon-separated sub-parameters: take first sub-parameter
+      const subParts = p.split(":")
+      return subParts.length > 0 && subParts[0]!.length > 0 ? parseInt(subParts[0]!, 10) : -1
+    })
     const numParams = parsedParams.length
+
+    // For Kitty protocol (CSI u), parse the full sub-parameter structure
+    // Format: codepoint:alt-code ; modifiers:event-type ; text-codepoints
+    let kittySubParams: (number[])[] = []
+    if (finalChar === "u" && params.length > 0) {
+      kittySubParams = params.split(";").map(group =>
+        group.split(":").map(s => s.length > 0 ? parseInt(s, 10) || 0 : 0)
+      )
+    }
 
     // Handle URxvt shift-modified keys: CSI <number> $
     if (intermediate === "$" && finalByte === 0x24) {
@@ -342,7 +355,7 @@ export class EventDecoder {
 
     // CSI u (Kitty keyboard protocol)
     if (finalChar === "u") {
-      return this.parseKittyCsiU(parsedParams, i)
+      return this.parseKittyCsiU(kittySubParams, i)
     }
 
     // CSI R — cursor position report OR modified F3
@@ -362,27 +375,24 @@ export class EventDecoder {
     // X10 mouse: CSI M (3 bytes follow) — but NOT SGR mouse (CSI < ... M)
     if (finalChar === "M" && !params.startsWith("<")) {
       if (i + 3 <= buf.length) {
-        const b = buf.charCodeAt(i) - 32
+        const rawBtn = buf.charCodeAt(i) - 32
         const cx = buf.charCodeAt(i + 1) - 32
         const cy = buf.charCodeAt(i + 2) - 32
         i += 3
 
-        const mod = (b >> 2) & 0x1F
-        const btnBits = b & 0x03
-        const isRelease = btnBits === 3
-        const isMotion = (b & 0x20) !== 0
-        const isWheel = (b & 0x40) !== 0
+        const { mod, btn, isMotion } = this.parseMouseButton(rawBtn)
+        const isRelease = (rawBtn & 0x03) === 0x03
 
-        if (isWheel) {
-          return { n: i, event: { type: "mouseWheel", mouse: { x: cx - 1, y: cy - 1, button: btnBits + 4, mod } } }
+        if (btn >= 4 && btn <= 7) {
+          return { n: i, event: { type: "mouseWheel", mouse: { x: cx - 1, y: cy - 1, button: btn, mod } } }
         }
         if (isMotion) {
-          return { n: i, event: { type: "mouseMotion", mouse: { x: cx - 1, y: cy - 1, button: btnBits + 1, mod } } }
+          return { n: i, event: { type: "mouseMotion", mouse: { x: cx - 1, y: cy - 1, button: btn, mod } } }
         }
         if (isRelease) {
           return { n: i, event: { type: "mouseRelease", mouse: { x: cx - 1, y: cy - 1, button: 0, mod } } }
         }
-        return { n: i, event: { type: "mouseClick", mouse: { x: cx - 1, y: cy - 1, button: btnBits + 1, mod } } }
+        return { n: i, event: { type: "mouseClick", mouse: { x: cx - 1, y: cy - 1, button: btn, mod } } }
       }
     }
 
@@ -522,6 +532,34 @@ export class EventDecoder {
   }
 
   /**
+   * Parse Kitty keyboard protocol extensions for non CSI-u sequences.
+   * Handles release/repeat events via colon-separated sub-parameters.
+   * Go: parseKittyKeyboardExt
+   */
+  private parseKittyKeyboardExt(
+    rawParams: string,
+    key: Key,
+  ): TerminalEvent {
+    // Kitty protocol extensions use colon-separated sub-parameters
+    // Format: CSI 1 ; <modifiers>:<event-type> <letter>
+    // or CSI <number> ; <modifiers>:<event-type> ~
+    const groups = rawParams.split(";")
+    if (groups.length > 1) {
+      const secondGroup = groups[1]!
+      if (secondGroup.includes(":")) {
+        const subParts = secondGroup.split(":")
+        const eventType = parseInt(subParts[1] ?? "1", 10)
+        if (eventType === 2) {
+          key.isRepeat = true
+        } else if (eventType === 3) {
+          return { type: "keyRelease", key }
+        }
+      }
+    }
+    return { type: "keyPress", key }
+  }
+
+  /**
    * Parse CSI 27 ; modifier ; code ~ (XTerm modifyOtherKeys).
    */
   private parseXTermModifyOtherKeys(params: number[], endIdx: number): DecodeResult {
@@ -548,27 +586,55 @@ export class EventDecoder {
 
   /**
    * Parse CSI u (Kitty keyboard protocol / fixterms).
-   * CSI codepoint ; modifiers u
+   * Basic: CSI codepoint ; modifiers u
+   * Extended: CSI unicode-key-code:alternate-key-codes ; modifiers:event-type ; text-as-codepoints u
+   * See https://sw.kovidgoyal.net/kitty/keyboard-protocol/
    */
-  private parseKittyCsiU(params: number[], endIdx: number): DecodeResult {
-    if (params.length === 0) {
+  private parseKittyCsiU(kittySubParams: number[][], endIdx: number): DecodeResult {
+    if (kittySubParams.length === 0) {
       return { n: endIdx, event: null }
     }
 
-    const codepoint = params[0] ?? 0
-    const mod = params.length > 1 ? (params[1] ?? 1) - 1 : 0
+    // Group 0: codepoint:alternate-key-codes
+    const group0 = kittySubParams[0] ?? [0]
+    const codepoint = group0[0] ?? 0
+
+    // Group 1: modifiers:event-type
+    const group1 = kittySubParams[1] ?? [1]
+    const modParam = group1[0] ?? 1
+    const eventType = group1[1] ?? 1
+
+    // Group 2+: text-as-codepoints
+    let text = ""
+    for (let g = 2; g < kittySubParams.length; g++) {
+      const group = kittySubParams[g]!
+      for (const code of group) {
+        if (code !== 0) text += String.fromCodePoint(code)
+      }
+    }
+
+    const mod = modParam > 1 ? this.fromKittyMod(modParam - 1) : 0
+    const isRepeat = eventType === 2
+    const isRelease = eventType === 3
 
     let keyCode = codepoint
-    let text = ""
 
-    // Map codepoint to internal key
     if (codepoint >= 57344 && codepoint <= 63743) {
       keyCode = this.kittyCodepointToKey(codepoint)
     } else if (codepoint >= 0x20 && codepoint < 0x7F) {
-      text = String.fromCharCode(codepoint)
+      if (text === "") text = String.fromCharCode(codepoint)
     }
 
-    const key: Key = { code: keyCode, text, mod: this.fromKittyMod(mod) }
+    const key: Key = {
+      code: keyCode,
+      text,
+      mod,
+      isRepeat,
+    }
+
+    if (isRelease) {
+      return { n: endIdx, event: { type: "keyRelease", key } }
+    }
     return { n: endIdx, event: { type: "keyPress", key } }
   }
 
@@ -632,18 +698,55 @@ export class EventDecoder {
     const btnCode = params[0] ?? 0
     const x = (params[1] ?? 1) - 1
     const y = (params[2] ?? 1) - 1
-    const mod = (btnCode >> 2) & 0x1F
-    const btn = btnCode & 0x03
 
-    if (btnCode & 0x40) {
-      // Wheel
-      const event = release ? "mouseRelease" : "mouseWheel"
-      return { n: endIdx, event: { type: event, mouse: { x, y, button: btn + 4, mod } } }
+    const { mod, btn, isMotion } = this.parseMouseButton(btnCode)
+
+    // Wheel buttons don't have release events
+    // Motion can be reported as a release event in some terminals (Windows Terminal)
+    if (btn >= 4 && btn <= 7) {
+      return { n: endIdx, event: { type: "mouseWheel", mouse: { x, y, button: btn, mod } } }
+    } else if (!isMotion && release) {
+      return { n: endIdx, event: { type: "mouseRelease", mouse: { x, y, button: btn, mod } } }
+    } else if (isMotion) {
+      return { n: endIdx, event: { type: "mouseMotion", mouse: { x, y, button: btn, mod } } }
     }
-    if (release) {
-      return { n: endIdx, event: { type: "mouseRelease", mouse: { x, y, button: btn + 1, mod } } }
+    return { n: endIdx, event: { type: "mouseClick", mouse: { x, y, button: btn, mod } } }
+  }
+
+  /**
+   * Parse mouse button code into modifiers, button number, and motion flag.
+   * Matches Go's parseMouseButton function.
+   */
+  private parseMouseButton(b: number): { mod: number; btn: number; isMotion: boolean } {
+    const bitShift = 0b0000_0100
+    const bitAlt = 0b0000_1000
+    const bitCtrl = 0b0001_0000
+    const bitMotion = 0b0010_0000
+    const bitWheel = 0b0100_0000
+    const bitAdd = 0b1000_0000
+    const bitsMask = 0b0000_0011
+
+    let mod = 0
+    if (b & bitAlt) mod |= ModAlt
+    if (b & bitCtrl) mod |= ModCtrl
+    if (b & bitShift) mod |= ModShift
+
+    let btn: number
+    if (b & bitAdd) {
+      btn = 8 + (b & bitsMask) // Additional buttons 8-11
+    } else if (b & bitWheel) {
+      btn = 4 + (b & bitsMask) // Wheel buttons
+    } else {
+      btn = 1 + (b & bitsMask) // Regular buttons
+      // X10 reports button release as bits 0b11 (3)
+      if ((b & bitsMask) === bitsMask) {
+        btn = 0
+      }
     }
-    return { n: endIdx, event: { type: "mouseClick", mouse: { x, y, button: btn + 1, mod } } }
+
+    const isMotion = (b & bitMotion) !== 0 && !(btn >= 4 && btn <= 7)
+
+    return { mod, btn, isMotion }
   }
 
   /**

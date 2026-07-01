@@ -30,6 +30,7 @@ export class TerminalRenderer {
   private colorProfile: ColorProfile = "truecolor"
   private oldLineHashes: number[] = []
   private newLineHashes: number[] = []
+  private lineContentMap: Map<number, number> = new Map()
 
   constructor(output: NodeJS.WriteStream = process.stdout) {
     this.output = output
@@ -123,26 +124,35 @@ export class TerminalRenderer {
   }
 
   /**
-   * Compute hashes for each line in the current buffer.
+   * Compute hashes for each line in the current buffer and populate
+   * the line content map that maps hash → line number for scroll detection.
    */
   private computeLineHashes(): void {
     this.newLineHashes = []
+    this.lineContentMap.clear()
     for (let y = 0; y < this.height; y++) {
       const cells: Cell[] = []
       for (let x = 0; x < this.width; x++) {
         const cell = this.currBuffer.getCell(x, y)
         if (cell) cells.push(cell)
       }
-      this.newLineHashes.push(hashLine(cells))
+      const h = hashLine(cells)
+      this.newLineHashes.push(h)
+      if (h !== 0) {
+        this.lineContentMap.set(h, y)
+      }
     }
   }
 
   /**
-   * Detect scroll by checking if currBuffer lines 1..N match prevBuffer lines 0..N-1.
-   * Returns the number of lines scrolled up (0 if no scroll detected).
+   * Detect scroll by comparing current and previous line hashes.
+   * Returns { direction: number, amount: number } where:
+   *   direction > 0 means scroll up (content moved up, new lines at bottom)
+   *   direction < 0 means scroll down (content moved down, new lines at top)
+   *   direction === 0 means no scroll detected
    */
-  private detectScroll(): number {
-    // Check from top: find first line where curr[y] differs from prev[y-1]
+  private detectScroll(): { direction: number; amount: number } {
+    // Detect scroll-up: curr lines [offset..N-1] match prev lines [0..N-1-offset]
     for (let offset = 1; offset < this.height; offset++) {
       let match = true
       for (let y = offset; y < this.height; y++) {
@@ -151,9 +161,22 @@ export class TerminalRenderer {
           break
         }
       }
-      if (match) return offset
+      if (match) return { direction: 1, amount: offset }
     }
-    return 0
+
+    // Detect scroll-down: curr lines [0..N-1-offset] match prev lines [offset..N-1]
+    for (let offset = 1; offset < this.height; offset++) {
+      let match = true
+      for (let y = 0; y < this.height - offset; y++) {
+        if (this.newLineHashes[y] !== this.oldLineHashes[y + offset]) {
+          match = false
+          break
+        }
+      }
+      if (match) return { direction: -1, amount: offset }
+    }
+
+    return { direction: 0, amount: 0 }
   }
 
   /**
@@ -165,45 +188,86 @@ export class TerminalRenderer {
     let changes = 0
 
     const scroll = this.detectScroll()
-    const startLine = scroll > 0 ? 0 : 0
+    let startLine = 0
 
-    if (scroll > 0) {
-      // Emit scroll: move to bottom line and write newlines
-      buffer += `${CSI}${this.height};1H`
-      for (let i = 0; i < scroll; i++) {
-        buffer += "\n"
-      }
-      changes += scroll
+    if (scroll.direction !== 0 && scroll.amount > 0) {
+      if (scroll.direction === 1) {
+        // Scroll-up: content moved up, new lines at bottom
+        buffer += `${CSI}${this.height};1H`
+        for (let i = 0; i < scroll.amount; i++) {
+          buffer += "\n"
+        }
+        this.pendingOutput += buffer
+        changes += scroll.amount
 
-      // Shift prevBuffer to match the scrolled state for diffing
-      for (let y = 0; y < this.height - scroll; y++) {
-        for (let x = 0; x < this.width; x++) {
-          const src = this.prevBuffer.getCell(x, y + scroll)
-          if (src) {
-            this.prevBuffer.setCell(x, y, src)
+        // Shift prevBuffer to match the scrolled state for diffing
+        for (let y = 0; y < this.height - scroll.amount; y++) {
+          for (let x = 0; x < this.width; x++) {
+            const src = this.prevBuffer.getCell(x, y + scroll.amount)
+            if (src) {
+              this.prevBuffer.setCell(x, y, src)
+            }
           }
         }
-      }
-      // Clear the bottom lines that were scrolled in
-      for (let y = this.height - scroll; y < this.height; y++) {
-        for (let x = 0; x < this.width; x++) {
-          this.prevBuffer.setCell(x, y, {
-            Content: " ",
-            Style: null,
-            Link: { URL: "", Params: "" },
-            Width: 1,
-          })
+        for (let y = this.height - scroll.amount; y < this.height; y++) {
+          for (let x = 0; x < this.width; x++) {
+            this.prevBuffer.setCell(x, y, {
+              Content: " ",
+              Style: null,
+              Link: { URL: "", Params: "" },
+              Width: 1,
+            })
+          }
+        }
+      } else {
+        // Scroll-down: content moved down, new lines at top
+        // Use DECSTBM-style region + reverse index to scroll down
+        buffer += `${CSI}1;1H`
+        for (let i = 0; i < scroll.amount; i++) {
+          buffer += `${CSI}S`
+        }
+        this.pendingOutput += buffer
+        changes += scroll.amount
+
+        // Shift prevBuffer to match the scrolled state for diffing
+        for (let y = this.height - 1; y >= scroll.amount; y--) {
+          for (let x = 0; x < this.width; x++) {
+            const src = this.prevBuffer.getCell(x, y - scroll.amount)
+            if (src) {
+              this.prevBuffer.setCell(x, y, src)
+            }
+          }
+        }
+        for (let y = 0; y < scroll.amount; y++) {
+          for (let x = 0; x < this.width; x++) {
+            this.prevBuffer.setCell(x, y, {
+              Content: " ",
+              Style: null,
+              Link: { URL: "", Params: "" },
+              Width: 1,
+            })
+          }
         }
       }
     }
 
+    // Reset line content map for this diff pass
+    this.lineContentMap.clear()
+    for (let y = 0; y < this.height; y++) {
+      const h = this.newLineHashes[y]
+      if (h !== 0) this.lineContentMap.set(h, y)
+    }
+
     for (let y = startLine; y < this.height; y++) {
-      if (y < this.oldLineHashes.length && y + scroll < this.oldLineHashes.length &&
-          this.oldLineHashes[y + scroll] === this.newLineHashes[y] && this.newLineHashes[y] !== 0) {
+      // Skip lines where prev and new hashes match (unchanged lines)
+      if (y < this.oldLineHashes.length && y < this.newLineHashes.length &&
+          this.oldLineHashes[y] === this.newLineHashes[y] && this.newLineHashes[y] !== 0) {
         continue
       }
 
       let pen: Style | null = null
+      let runStart = -1
+      let runContent = ""
 
       for (let x = 0; x < this.width; x++) {
         const prev = this.prevBuffer.getCell(x, y)
@@ -211,28 +275,81 @@ export class TerminalRenderer {
 
         if (prev && curr && !cellEquals(prev, curr)) {
           if (!isZero(curr)) {
-            buffer += `${CSI}${y + 1};${x + 1}H`
-
-            const currStyle = curr.Style
-            if (!isStyleEmpty(currStyle)) {
-              if (!stylesEqual(pen, currStyle)) {
-                buffer += styleDiff(pen, currStyle)
-                pen = currStyle
+            if (runStart === -1) {
+              // Start a new run of consecutive cells
+              runStart = x
+              buffer = `${CSI}${y + 1};${x + 1}H`
+              const currStyle = curr.Style
+              if (!isStyleEmpty(currStyle)) {
+                if (!stylesEqual(pen, currStyle)) {
+                  buffer += styleDiff(pen, currStyle)
+                  pen = currStyle
+                }
+              } else if (!isStyleEmpty(pen)) {
+                buffer += `${CSI}0m`
+                pen = null
               }
-            } else if (!isStyleEmpty(pen)) {
-              buffer += `${CSI}0m`
-              pen = null
+              buffer += curr.Content
+              runContent = curr.Content
+            } else {
+              // Check if this cell is adjacent (consecutive)
+              if (x === runStart + runContent.length) {
+                // Extend the run
+                const currStyle = curr.Style
+                if (!isStyleEmpty(currStyle)) {
+                  if (!stylesEqual(pen, currStyle)) {
+                    this.pendingOutput += buffer
+                    buffer = `${CSI}${y + 1};${x + 1}H`
+                    buffer += styleDiff(pen, currStyle)
+                    pen = currStyle
+                  }
+                } else if (!isStyleEmpty(pen)) {
+                  this.pendingOutput += buffer
+                  buffer = `${CSI}${y + 1};${x + 1}H`
+                  buffer += `${CSI}0m`
+                  pen = null
+                }
+                buffer += curr.Content
+                runContent += curr.Content
+              } else {
+                // Non-adjacent: flush current run and start new one
+                this.pendingOutput += buffer
+                buffer = `${CSI}${y + 1};${x + 1}H`
+                const currStyle = curr.Style
+                if (!isStyleEmpty(currStyle)) {
+                  if (!stylesEqual(pen, currStyle)) {
+                    buffer += styleDiff(pen, currStyle)
+                    pen = currStyle
+                  }
+                } else if (!isStyleEmpty(pen)) {
+                  buffer += `${CSI}0m`
+                  pen = null
+                }
+                buffer += curr.Content
+                runStart = x
+                runContent = curr.Content
+              }
             }
-
-            buffer += curr.Content
           }
           changes++
+        } else {
+          // Flush any pending run when encountering an unchanged cell
+          if (runStart !== -1) {
+            this.pendingOutput += buffer
+            buffer = ""
+            runStart = -1
+            runContent = ""
+          }
         }
       }
-    }
 
-    if (changes > 0) {
-      this.pendingOutput += buffer
+      // Flush any remaining run for this line
+      if (runStart !== -1) {
+        this.pendingOutput += buffer
+        buffer = ""
+        runStart = -1
+        runContent = ""
+      }
     }
 
     const temp = this.prevBuffer
