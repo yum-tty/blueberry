@@ -74,7 +74,11 @@ export class TerminalRenderer {
       let currentStyle: Style | null = null
 
       for (let i = 0; i < line.length && x < this.width; i++) {
-        const char = line[i]!
+        const charCode = line.charCodeAt(i)
+        const isSurrogate = charCode >= 0xD800 && charCode <= 0xDBFF
+        const char = isSurrogate && i + 1 < line.length
+          ? String.fromCodePoint((charCode << 10) + line.charCodeAt(i + 1) + 0x35FDC00)
+          : line[i]!
 
         if (char === "\x1b") {
           let seq = "\x1b"
@@ -101,6 +105,7 @@ export class TerminalRenderer {
           Width: 1,
         })
         x++
+        if (isSurrogate) i++
       }
     }
   }

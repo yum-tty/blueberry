@@ -180,7 +180,11 @@ function printString(
   let i = 0
 
   while (i < str.length) {
-    const ch = str[i]!
+    const chCode = str.charCodeAt(i)
+    const isSurrogate = chCode >= 0xD800 && chCode <= 0xDBFF
+    const ch = isSurrogate && i + 1 < str.length
+      ? String.fromCodePoint((chCode << 10) + str.charCodeAt(i + 1) + 0x35FDC00)
+      : str[i]!
 
     if (ch === "\x1b") {
       const seqStart = i
@@ -286,7 +290,7 @@ function printString(
       }
     }
 
-    i++
+    i += isSurrogate ? 2 : 1
   }
 
   return lines

@@ -553,10 +553,8 @@ export function EncodeProgressBar(pb: ProgressBarData | null): string {
 // Go: func EncodeKeyboardEnhancements(w io.Writer, ke *KeyboardEnhancements) error
 export function EncodeKeyboardEnhancements(ke: KeyboardEnhancementsOpts | null): string {
   const flags = ke ? KeyboardEnhancementsFlags(ke) : 0
-  return `\x1b[?u`
-  // Actual encoding: CSI {flags} u (pushCurrentFlags=1)
-  // The Kitty keyboard protocol: \x1b[>{flags}u to push, \x1b[={flags}u to set
-  // Simplified: just return the set sequence
+  // ansi.KittyKeyboard(flags, 1) produces CSI > {flags} u (push current flags, then set)
+  return `\x1b[>${flags}u`
 }
 
 // Go: func EncodeWindowTitle(w io.Writer, title string) error

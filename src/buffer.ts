@@ -533,7 +533,7 @@ export class RenderBuffer {
   }
 
   Touch(x: number, y: number): void {
-    this.TouchLine(x, y, 0)
+    this.TouchLine(x, y, 1)
   }
 
   TouchedLines(): number {
@@ -634,7 +634,7 @@ export class RenderBuffer {
         if (c) rb.Buffer.SetCell(x, y, c)
       }
       const td = this.Touched[y]
-      if (td) rb.Touched[y] = { ...td }
+      if (td) rb.Touched[y] = { FirstCell: td.FirstCell, LastCell: td.LastCell }
     }
     return rb
   }
@@ -766,9 +766,11 @@ export class ScreenBuffer {
       if (y + i >= this.height) break
       const line = lines[i]!
       let currentX = x
-      for (let j = 0; j < line.length; j++) {
+      let j = 0
+      while (j < line.length) {
         if (currentX >= this.width) break
-        const ch = line[j]!
+        const cp = line.codePointAt(j)!
+        const ch = cp > 0xFFFF ? String.fromCodePoint(cp) : line[j]!
         const chWidth = getStringWidth(ch) || 1
         this.setCell(currentX, y + i, {
           Content: ch,
@@ -777,6 +779,7 @@ export class ScreenBuffer {
           Width: chWidth,
         })
         currentX += chWidth
+        j += cp > 0xFFFF ? 2 : 1
       }
     }
   }
