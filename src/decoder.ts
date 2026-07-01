@@ -408,9 +408,10 @@ export class EventDecoder {
     if (finalChar === "O" && numParams === 0) return { n: i, event: { type: "blur" } }
 
     // Arrow/function/Home/End keys (single letter finals without params or with "1;mod" params)
-    const csiLetterKey = this.csiLetterKey(finalChar, parsedParams, numParams)
-    if (csiLetterKey) {
-      return { n: i, event: { type: "keyPress", key: csiLetterKey } }
+    const csiLetterKeyResult = this.csiLetterKey(finalChar, parsedParams, numParams)
+    if (csiLetterKeyResult) {
+      // Check for Kitty keyboard protocol extensions (release/repeat via colon sub-params)
+      return { n: i, event: this.parseKittyKeyboardExt(params, csiLetterKeyResult) }
     }
 
     // Tilde sequences: CSI <number> ~
@@ -428,7 +429,7 @@ export class EventDecoder {
           if (numParams > 1 && parsedParams[1]! >= 1) {
             key.mod |= this.fromXtermMod(parsedParams[1]! - 1)
           }
-          return { n: i, event: { type: "keyPress", key } }
+          return { n: i, event: this.parseKittyKeyboardExt(params, key) }
         }
       }
     }
