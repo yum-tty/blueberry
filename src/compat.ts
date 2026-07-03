@@ -10,7 +10,6 @@ export const AttrReverse = 1 << 5
 export const AttrConceal = 1 << 6
 export const AttrStrikethrough = 1 << 7
 export const AttrReset = 0
-export const AttrSlowBlink = AttrBlink // deprecated alias
 
 // ── Underline style constants (Go: UnderlineNone = ansi.UnderlineNone) ──
 export const UnderlineNone = "none"
@@ -20,17 +19,8 @@ export const UnderlineCurly = "curly"
 export const UnderlineDotted = "dotted"
 export const UnderlineDashed = "dashed"
 
-// Deprecated aliases
-export const UnderlineStyleNone = UnderlineNone
-export const UnderlineStyleSingle = UnderlineSingle
-export const UnderlineStyleDouble = UnderlineDouble
-export const UnderlineStyleCurly = UnderlineCurly
-export const UnderlineStyleDotted = UnderlineDotted
-export const UnderlineStyleDashed = UnderlineDashed
-
 // ── Underline type (Go: type Underline = ansi.Underline) ──
 export type Underline = string
-export type UnderlineStyle = string // deprecated
 
 // ── Direction / Side / Position ──
 export const Horizontal = "horizontal"
@@ -135,14 +125,6 @@ export function TrimSpace(s: string): string {
     lines[i] = line
   }
   return lines.join("\n")
-}
-
-// ── Logger ──
-export class Logger {
-  debug(...args: any[]): void {}
-  info(...args: any[]): void {}
-  warn(...args: any[]): void {}
-  error(...args: any[]): void {}
 }
 
 // ── Environ ──
@@ -606,37 +588,10 @@ export function DefaultTabStops(): number[] {
 }
 export const TabStops = DefaultTabStops()
 
-// ── Terminal stubs ──
-export const DefaultConsole = null
-export const DefaultTerminal = null
-export const DefaultOptions = {}
-export const ControllingConsole = null
-export const ControllingTerminal = null
-export const LegacyKeyEncoding = false
-export const Suspend = () => {}
-export const NotifyWinch = () => {}
-export const NotifyWinchContext = () => {}
-export const OpenTTY = () => null
-export const File = null
-export const TTY = null
-export const Console = null
-
-// ── Window ──
-export const Window = { width: 80, height: 24 }
-export const NewWindow = () => ({ width: 80, height: 24 })
-export const Winsize = { width: 80, height: 24 }
-export const SizeNotifier = null
-
 // ── Misc ──
 export function Pos(x: number, y: number): { x: number; y: number } { return { x, y } }
 export function New(...args: any[]): any { return args }
-export const Options = {}
-export function NewSizeNotifier(): any { return null }
 export function NewTabStops(): number[] { return DefaultTabStops() }
-export function NewContext(): any { return null }
-export function NewCancelReader(): any { return null }
-
-export function NewStyledString(str: string): any { return { text: str, wrap: false, tail: "" } }
 
 // ── Buffer factory functions ──
 import { ScreenBuffer, Buffer, RenderBuffer, NewLine, NewLine as _NewLine } from "./buffer"
@@ -644,13 +599,6 @@ export function NewBuffer(w: number, h: number): Buffer { return new Buffer(w, h
 export function NewScreenBuffer(w: number, h: number): ScreenBuffer { return new ScreenBuffer(w, h) }
 export function NewRenderBuffer(w: number, h: number): RenderBuffer { return new RenderBuffer(w, h) }
 export { _NewLine as NewLine }
-
-// ── Terminal factory functions ──
-export function NewTerminal(): any { return null }
-export function NewTerminalReader(): any { return null }
-export function NewTerminalRenderer(): any { return null }
-export function NewTerminalScreen(): any { return null }
-export function NewConsole(): any { return null }
 
 // ── ProgressBar ──
 export const ProgressBar = {
@@ -700,10 +648,6 @@ export function Fill(buf: ScreenBuffer, x: number, y: number, w: number, h: numb
 export function FillArea(buf: ScreenBuffer, area: Rectangle, cell: any): void {
   Fill(buf, area.MinX, area.MinY, area.MaxX - area.MinX, area.MaxY - area.MinY, cell)
 }
-
-// ── Terminal types ──
-export interface TerminalReader {}
-export interface TerminalScreen {}
 
 // ── Event types (runtime-compatible) ──
 export interface ClipboardEventType { type: "clipboard"; data: string; selection: string }

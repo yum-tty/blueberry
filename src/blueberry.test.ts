@@ -98,7 +98,6 @@ import {
   NewScreenBuffer,
   NewBuffer,
   NewRenderBuffer,
-  NewStyledString,
   ConvertStyle,
   AttrBold,
   AttrItalic,
@@ -759,11 +758,6 @@ describe("StyledString", () => {
     const ss = new StyledString("a\nb")
     const lines = ss.Lines()
     expect(lines.length).toBe(2)
-  })
-
-  test("NewStyledString creates styled string", () => {
-    const ss = NewStyledString("test")
-    expect(ss).toBeDefined()
   })
 })
 
