@@ -57,6 +57,11 @@ export class StyledString {
   content: string
   spans: StyledSpan[]
 
+  /**
+   * Create a new StyledString.
+   * @param content - The raw text content.
+   * @param spans - Optional styled spans describing per-character styling.
+   */
   constructor(content: string, spans: StyledSpan[] = []) {
     this.Text = content
     this.content = content
@@ -65,6 +70,10 @@ export class StyledString {
     this.Tail = ""
   }
 
+  /**
+   * Return the raw text content of this styled string.
+   * @returns The text string.
+   */
   String(): string { return this.Text }
 
   /**
@@ -496,8 +505,10 @@ function ansi256ToHex(idx: number): string {
 }
 
 /**
- * ReadStyle is exported for compat.ts usage.
+ * Parse ANSI SGR parameter numbers into a pen Style, replacing its properties in-place.
  * Go: ReadStyle(params ansi.Params, pen *Style)
+ * @param params - Array of SGR parameter numbers (e.g. [1, 38, 2, 255, 0, 0]).
+ * @param pen - The Style object to mutate with parsed attributes.
  */
 export function ReadStyle(params: number[], pen: Style): void {
   if (params.length === 0) {
@@ -511,9 +522,10 @@ export function ReadStyle(params: number[], pen: Style): void {
 }
 
 /**
- * ReadLink parses OSC 8 hyperlink escape data into a Link.
+ * Parse OSC 8 hyperlink escape data into a Link, mutating it in-place.
  * Go: ReadLink(p []byte, link *Link)
- * Expects 3-part semicolon-separated data: action;params;URL
+ * @param data - Semicolon-separated OSC 8 data in the form "action;params;URL".
+ * @param link - The Link object to populate with Params and URL.
  */
 export function ReadLink(data: string, link: Link): void {
   const parts = data.split(";")
@@ -523,7 +535,9 @@ export function ReadLink(data: string, link: Link): void {
 }
 
 /**
- * Convert a Style to an ANSI string.
+ * Convert a Style to its ANSI SGR escape sequence string.
+ * @param style - The style to convert, or null/empty for no output.
+ * @returns The SGR escape sequence (e.g. "\x1b[1;38;2;255;0;0m"), or empty string if no style.
  */
 export function styleToString(style: Style | null): string {
   if (!style || isStyleEmpty(style)) return ""
@@ -572,7 +586,9 @@ export function styleToString(style: Style | null): string {
 const RESET = "\x1b[0m"
 
 /**
- * Check if a style is empty (no attributes or colors set).
+ * Check whether a Style has no attributes or colors set.
+ * @param s - The style to test, or null.
+ * @returns True if the style is null or contains no active properties.
  */
 export function isStyleEmpty(s: Style | null): boolean {
   if (!s) return true
@@ -593,7 +609,10 @@ function codeEqual(a?: number, b?: number): boolean {
 }
 
 /**
- * Compute the minimal ANSI SGR sequence to transition from `from` to `to`.
+ * Compute the minimal ANSI SGR sequence needed to transition from one style to another.
+ * @param from - The current style, or null for default.
+ * @param to - The target style, or null to reset.
+ * @returns The minimal SGR escape string, or empty if styles are identical.
  */
 export function styleDiff(from: Style | null, to: Style | null): string {
   if (!from && !to) return ""
@@ -672,7 +691,10 @@ export function styleDiff(from: Style | null, to: Style | null): string {
 }
 
 /**
- * Check if two styles are structurally equal.
+ * Check whether two styles are structurally equal (all properties match).
+ * @param a - First style, or null.
+ * @param b - Second style, or null.
+ * @returns True if both styles have identical properties.
  */
 export function stylesEqual(a: Style | null, b: Style | null): boolean {
   if (!a && !b) return true
@@ -707,12 +729,20 @@ function hexToRgb(hex: string): string {
 }
 
 /**
- * Strip ANSI escape codes from a string (both CSI-SGR and OSC).
+ * Strip ANSI escape sequences (CSI-SGR and OSC 8) from a string.
+ * @param str - The input string possibly containing ANSI escapes.
+ * @returns The string with all escape sequences removed.
  */
 export function stripAnsi(str: string): string {
   return str.replace(/\x1b\[[0-9;]*m/g, "").replace(/\x1b\]8;[^;]*;[^\x07\x1b]*(?:\x07|\x1b\\)/g, "")
 }
 
+/**
+ * Measure the display width of a string, counting CJK characters as 2 columns.
+ * ANSI escape sequences are stripped before measurement.
+ * @param str - The string to measure (may contain ANSI escapes).
+ * @returns The total display width in terminal columns.
+ */
 export function getStringWidth(str: string): number {
   let w = 0
   for (const ch of stripAnsi(str)) {
