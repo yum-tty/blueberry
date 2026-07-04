@@ -24,6 +24,7 @@ export {
   type Style,
   type StyledSpan,
   type Underline,
+  WidthMethod as WidthMethodEnum,
   StyledString,
   styleToString,
   styleDiff,

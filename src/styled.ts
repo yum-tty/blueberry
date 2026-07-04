@@ -5,6 +5,14 @@ import { EmptyCell, cellClone } from "./cell"
 import { type Line, NewLine, LineSet } from "./buffer"
 
 /**
+ * WidthMethod enum for choosing the width calculation strategy.
+ */
+export enum WidthMethod {
+  WcWidth = "wcwidth",
+  TermW = "termw",
+}
+
+/**
  * Underline style enum matching Go ultraviolet's ansi.Underline.
  */
 export type Underline = "none" | "single" | "double" | "curly" | "dotted" | "dashed"
