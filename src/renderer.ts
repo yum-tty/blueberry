@@ -6,6 +6,8 @@ import { type Style, styleToString, styleDiff, isStyleEmpty, stylesEqual } from 
 
 const ESC = "\x1b"
 const CSI = `${ESC}[`
+const EMPTY_LINK = Object.freeze({ URL: "", Params: "" }) as { readonly URL: string; readonly Params: string }
+const FILL_CELL = Object.freeze({ Content: " ", Style: null, Link: EMPTY_LINK, Width: 1 })
 
 /**
  * TerminalRenderer handles rendering to the terminal.
@@ -59,12 +61,7 @@ export class TerminalRenderer {
 
     for (let y = 0; y < this.height; y++) {
       for (let x = 0; x < this.width; x++) {
-        this.currBuffer.setCell(x, y, {
-          Content: " ",
-          Style: null,
-          Link: { URL: "", Params: "" },
-          Width: 1,
-        })
+        this.currBuffer.setCell(x, y, FILL_CELL)
       }
     }
 
@@ -101,7 +98,7 @@ export class TerminalRenderer {
         this.currBuffer.setCell(x, y, {
           Content: char,
           Style: currentStyle,
-          Link: { URL: "", Params: "" },
+          Link: EMPTY_LINK,
           Width: 1,
         })
         x++

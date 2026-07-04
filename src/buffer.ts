@@ -86,7 +86,7 @@ export function LineAt(line: Line, x: number): Cell | null {
  * Go: Line.String() string
  */
 export function LineString(line: Line): string {
-  let buf = ""
+  const parts: string[] = []
   let pending = ""
   for (const c of line) {
     if (isZero(c)) continue
@@ -95,12 +95,13 @@ export function LineString(line: Line): string {
       continue
     }
     if (pending.length > 0) {
-      buf += pending
+      parts.push(pending)
       pending = ""
     }
-    buf += cellString(c)
+    parts.push(cellString(c))
   }
-  return buf
+  if (pending.length > 0) parts.push(pending)
+  return parts.join("")
 }
 
 /**
@@ -109,7 +110,7 @@ export function LineString(line: Line): string {
  * Go: Line.Render() string
  */
 export function LineRender(line: Line): string {
-  let buf = ""
+  const parts: string[] = []
   let pen: Style | null = null
   let link = { URL: "", Params: "" }
   let pending = ""
@@ -118,11 +119,11 @@ export function LineRender(line: Line): string {
     if (isZero(c)) continue
     if (cellEquals(c, EmptyCell)) {
       if (!isStyleEmpty(pen)) {
-        buf += RESET_STYLE
+        parts.push(RESET_STYLE)
         pen = null
       }
       if (!linkIsZero(link)) {
-        buf += RESET_HYPERLINK
+        parts.push(RESET_HYPERLINK)
         link = { URL: "", Params: "" }
       }
       pending += " "
@@ -130,39 +131,39 @@ export function LineRender(line: Line): string {
     }
 
     if (pending.length > 0) {
-      buf += pending
+      parts.push(pending)
       pending = ""
     }
 
     if (isStyleEmpty(c.Style) && !isStyleEmpty(pen)) {
-      buf += RESET_STYLE
+      parts.push(RESET_STYLE)
       pen = null
     }
     if (!stylesEqual(pen, c.Style)) {
-      buf += styleDiff(pen, c.Style)
+      parts.push(styleDiff(pen, c.Style))
       pen = c.Style
     }
 
     if (!linkEqual(c.Link, link) && link.URL !== "") {
-      buf += RESET_HYPERLINK
+      parts.push(RESET_HYPERLINK)
       link = { URL: "", Params: "" }
     }
     if (!linkEqual(c.Link, link)) {
-      buf += `\x1b]8;${c.Link.Params};${c.Link.URL}\x07`
+      parts.push(`\x1b]8;${c.Link.Params};${c.Link.URL}\x07`)
       link = c.Link
     }
 
-    buf += cellString(c)
+    parts.push(cellString(c))
   }
 
   if (link.URL !== "") {
-    buf += RESET_HYPERLINK
+    parts.push(RESET_HYPERLINK)
   }
   if (!isStyleEmpty(pen)) {
-    buf += RESET_STYLE
+    parts.push(RESET_STYLE)
   }
 
-  return buf
+  return parts.join("")
 }
 
 // ── Lines type ──
@@ -198,12 +199,12 @@ export function LinesWidth(ls: Lines): number {
  * Go: Lines.String() string
  */
 export function LinesString(ls: Lines): string {
-  let buf = ""
+  const parts: string[] = []
   for (let i = 0; i < ls.length; i++) {
-    buf += LineString(ls[i]!)
-    if (i < ls.length - 1) buf += "\n"
+    parts.push(LineString(ls[i]!))
+    if (i < ls.length - 1) parts.push("\n")
   }
-  return buf
+  return parts.join("")
 }
 
 /**
@@ -211,12 +212,12 @@ export function LinesString(ls: Lines): string {
  * Go: Lines.Render() string
  */
 export function LinesRender(ls: Lines): string {
-  let buf = ""
+  const parts: string[] = []
   for (let i = 0; i < ls.length; i++) {
-    buf += LineRender(ls[i]!)
-    if (i < ls.length - 1) buf += "\n"
+    parts.push(LineRender(ls[i]!))
+    if (i < ls.length - 1) parts.push("\n")
   }
-  return buf
+  return parts.join("")
 }
 
 // ── LineData ──

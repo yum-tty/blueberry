@@ -88,7 +88,7 @@ export interface Cell {
 /**
  * EmptyCell is a cell with a single space, width of 1, and no style or link.
  */
-export const EmptyCell: Cell = { Content: " ", Style: null, Link: { URL: "", Params: "" }, Width: 1 }
+export const EmptyCell: Cell = Object.freeze({ Content: " ", Style: null, Link: Object.freeze({ URL: "", Params: "" }) as Link, Width: 1 }) as Cell
 
 /**
  * Create a new cell from the given string grapheme.
@@ -96,7 +96,7 @@ export const EmptyCell: Cell = { Content: " ", Style: null, Link: { URL: "", Par
  */
 export function NewCell(method: WidthMethod, gr: string): Cell | null {
   if (gr.length === 0) return null
-  if (gr === " ") return cellClone(EmptyCell)
+  if (gr === " ") return EmptyCell
   return { Content: gr, Style: null, Link: { URL: "", Params: "" }, Width: method(gr) }
 }
 
@@ -111,7 +111,7 @@ export function newCell(char: string, style: Style | null = null): Cell {
  * Create an empty cell.
  */
 export function emptyCell(): Cell {
-  return { Content: " ", Style: null, Link: { URL: "", Params: "" }, Width: 1 }
+  return EmptyCell
 }
 
 /**
@@ -152,6 +152,7 @@ export function isZero(cell: Cell | null): boolean {
  * Go: Cell.Clone() *Cell
  */
 export function cellClone(cell: Cell): Cell {
+  if (cell === EmptyCell) return cell
   return {
     Content: cell.Content,
     Style: cell.Style ? { ...cell.Style } : null,
