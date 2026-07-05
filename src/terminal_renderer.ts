@@ -495,6 +495,11 @@ const BRIGHT_COLORS = [
   "#5555FF", "#FF55FF", "#55FFFF", "#FFFFFF",
 ]
 
+const STANDARD_COLORS = [
+  "#000000", "#AA0000", "#00AA00", "#AA5500",
+  "#0000AA", "#AA00AA", "#00AAAA", "#AAAAAA",
+]
+
 const BRIGHT_FG_OFFSET = 90
 const BRIGHT_BG_OFFSET = 100
 
@@ -559,14 +564,14 @@ function parseSgrSequence(seq: string, current: Style | null): Style | null {
         break
       case 30: case 31: case 32: case 33:
       case 34: case 35: case 36: case 37:
-        style.foreground = BRIGHT_COLORS[p - 30]!
+        style.foreground = STANDARD_COLORS[p - 30]!
         style.fgCode = p
         break
       case 38: {
         if (params[i + 1] === 5 && i + 2 < params.length) {
           const idx = params[i + 2]!
           if (idx < 8) {
-            style.foreground = BRIGHT_COLORS[idx]!
+            style.foreground = STANDARD_COLORS[idx]!
             style.fgCode = 30 + idx
           } else if (idx < 16) {
             style.foreground = BRIGHT_COLORS[idx - 8]!
@@ -589,14 +594,14 @@ function parseSgrSequence(seq: string, current: Style | null): Style | null {
         break
       case 40: case 41: case 42: case 43:
       case 44: case 45: case 46: case 47:
-        style.background = BRIGHT_COLORS[p - 40]!
+        style.background = STANDARD_COLORS[p - 40]!
         style.bgCode = p
         break
       case 48: {
         if (params[i + 1] === 5 && i + 2 < params.length) {
           const idx = params[i + 2]!
           if (idx < 8) {
-            style.background = BRIGHT_COLORS[idx]!
+            style.background = STANDARD_COLORS[idx]!
             style.bgCode = 40 + idx
           } else if (idx < 16) {
             style.background = BRIGHT_COLORS[idx - 8]!

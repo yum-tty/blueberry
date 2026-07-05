@@ -270,7 +270,7 @@ function printString(
     }
 
     // Regular character
-    const cellWidth = 1
+    const cellWidth = getStringWidth(ch) || 1
     const cellStyle: Style | null = style != null ? cloneStyle(style) : null
     const cellLink: Link = link != null ? { URL: link.URL, Params: link.Params } : { URL: "", Params: "" }
     const newCell: Cell = {
@@ -319,13 +319,11 @@ function printString(
  * OSC 8 data format: "params;URL" (split by first semicolon)
  */
 function readLinkData(data: string, setLink: (l: Link) => void): void {
-  const parts = data.split(";", 3)
-  if (parts.length < 3) {
-    // Go's ReadLink expects exactly 3 parts (action;params;URL)
-    // If fewer, it's malformed
+  const parts = data.split(";", 2)
+  if (parts.length < 2) {
     return
   }
-  setLink({ Params: parts[1]!, URL: parts[2]! })
+  setLink({ Params: parts[0]!, URL: parts[1]! })
 }
 
 /**
