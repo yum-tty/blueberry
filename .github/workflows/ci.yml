@@ -16,6 +16,16 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Clone sibling packages
+        run: |
+          cd ..
+          git clone --depth 1 https://github.com/yum-tty/caramel.git
+          git clone --depth 1 https://github.com/yum-tty/cinnamon-bun.git
+          git clone --depth 1 https://github.com/yum-tty/cinnamon.git
+          git clone --depth 1 https://github.com/yum-tty/blueberry.git
+          git clone --depth 1 https://github.com/yum-tty/marshmallow.git
+          git clone --depth 1 https://github.com/yum-tty/prompts.git
+
       - name: Install dependencies
         run: bun install
 
