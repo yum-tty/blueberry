@@ -19,7 +19,7 @@ bun add github:yum-tty/blueberry
 Or install from a specific package:
 
 ```bash
-bun add blueberry
+bun add @yum-tty/blueberry
 ```
 
 ## Quick Start
