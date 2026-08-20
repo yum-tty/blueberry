@@ -1,6 +1,6 @@
 {
   "name": "@yum-tty/blueberry",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Cell-based terminal rendering primitives for Bun. A TypeScript port of Ultraviolet.",
   "module": "src/index.ts",
   "type": "module",
