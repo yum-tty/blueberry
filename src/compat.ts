@@ -260,7 +260,7 @@ export function ReadLink(data: string, link: { url: string; params: string }): v
 export function ReadStyle(params: number[], pen: any): void {
   let i = 0
   while (i < params.length) {
-    const p = params[i]
+    const p = params[i]!
     if (p === 0) {
       pen.bold = false
       pen.faint = false

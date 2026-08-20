@@ -479,7 +479,7 @@ export class Terminal {
         events.push({ type: "keyPress", key: { code: ch + 0x60, text: "", mod: 4 } })
         i++
       } else {
-        events.push({ type: "keyPress", key: { code: ch, text: str[i], mod: 0 } })
+        events.push({ type: "keyPress", key: { code: ch, text: str[i]!, mod: 0 } })
         i++
       }
     }

@@ -528,8 +528,8 @@ export class RenderBuffer {
     if (ch === null) {
       this.Touched[y] = { FirstCell: x, LastCell: x + n }
     } else {
-      ch.FirstCell = Math.min(ch.FirstCell, x)
-      ch.LastCell = Math.max(ch.LastCell, x + n)
+      ch!.FirstCell = Math.min(ch!.FirstCell, x)
+      ch!.LastCell = Math.max(ch!.LastCell, x + n)
     }
   }
 

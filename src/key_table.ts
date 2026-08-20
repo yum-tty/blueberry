@@ -1,7 +1,7 @@
 // key_table.ts | CSI sequence to key lookup table (ultraviolet port)
 
 import {
-  Key,
+  type Key,
   ModShift,
   ModAlt,
   ModCtrl,

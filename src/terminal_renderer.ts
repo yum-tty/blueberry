@@ -241,7 +241,7 @@ export class TerminalRenderer {
     // Reset line content map for this diff pass
     this.lineContentMap.clear()
     for (let y = 0; y < this.height; y++) {
-      const h = this.newLineHashes[y]
+      const h = this.newLineHashes[y]!
       if (h !== 0) this.lineContentMap.set(h, y)
     }
 
